@@ -67,6 +67,10 @@ public:
         ImGui::Checkbox("Memory Info",       &m_ShowMemoryInfo);
         ImGui::Checkbox("Game UI Explorer",  &m_ShowUiExplorer);
         ImGui::Checkbox("Component Reader",  &m_ShowComponentReader);
+        ImGui::Checkbox("Render Demo",       &m_ShowRender);
+        ImGui::Checkbox("Terrain Demo",      &m_ShowTerrain);
+        ImGui::Checkbox("Events Demo",       &m_ShowEvents);
+        ImGui::Checkbox("Log Demo",          &m_ShowLog);
         ImGui::Separator();
         ImGui::Checkbox("Enable Overlay Mode", &m_WantsOverlay);
         ImGui::SliderFloat("Window Opacity", &m_WindowAlpha, 0.3f, 1.0f, "%.1f");
@@ -148,22 +152,22 @@ public:
                 ImGui::EndTabItem();
             }
 
-            if (ImGui::BeginTabItem("Render")) {
+            if (m_ShowRender && ImGui::BeginTabItem("Render")) {
                 Examples::DrawRenderPanel(ctx(), snapshot);
                 ImGui::EndTabItem();
             }
 
-            if (ImGui::BeginTabItem("Terrain")) {
+            if (m_ShowTerrain && ImGui::BeginTabItem("Terrain")) {
                 Examples::DrawTerrainPanel(ctx(), snapshot);
                 ImGui::EndTabItem();
             }
 
-            if (ImGui::BeginTabItem("Events")) {
+            if (m_ShowEvents && ImGui::BeginTabItem("Events")) {
                 Examples::DrawEventsPanel(ctx(), m_eventsState);
                 ImGui::EndTabItem();
             }
 
-            if (ImGui::BeginTabItem("Log")) {
+            if (m_ShowLog && ImGui::BeginTabItem("Log")) {
                 Examples::DrawLogPanel(ctx(), m_logSentCount);
                 ImGui::EndTabItem();
             }
@@ -190,6 +194,10 @@ public:
         file << "ShowMemoryInfo=" << (m_ShowMemoryInfo ? 1 : 0) << "\n";
         file << "ShowUiExplorer=" << (m_ShowUiExplorer ? 1 : 0) << "\n";
         file << "ShowComponentReader=" << (m_ShowComponentReader ? 1 : 0) << "\n";
+        file << "ShowRender=" << (m_ShowRender ? 1 : 0) << "\n";
+        file << "ShowTerrain=" << (m_ShowTerrain ? 1 : 0) << "\n";
+        file << "ShowEvents=" << (m_ShowEvents ? 1 : 0) << "\n";
+        file << "ShowLog=" << (m_ShowLog ? 1 : 0) << "\n";
         file << "WantsOverlay=" << (m_WantsOverlay ? 1 : 0) << "\n";
         file << "WindowAlpha=" << m_WindowAlpha << "\n";
     }
@@ -284,6 +292,10 @@ private:
             else if (key == "ShowMemoryInfo")      m_ShowMemoryInfo = (val == "1");
             else if (key == "ShowUiExplorer")      m_ShowUiExplorer = (val == "1");
             else if (key == "ShowComponentReader") m_ShowComponentReader = (val == "1");
+            else if (key == "ShowRender")          m_ShowRender = (val == "1");
+            else if (key == "ShowTerrain")         m_ShowTerrain = (val == "1");
+            else if (key == "ShowEvents")          m_ShowEvents = (val == "1");
+            else if (key == "ShowLog")             m_ShowLog = (val == "1");
             else if (key == "WantsOverlay")        m_WantsOverlay = (val == "1");
             else if (key == "WindowAlpha") {
                 try { m_WindowAlpha = std::stof(val); } catch (...) {}
@@ -298,6 +310,10 @@ private:
     bool m_ShowMemoryInfo = false;
     bool m_ShowUiExplorer = false;
     bool m_ShowComponentReader = false;
+    bool m_ShowRender = true;
+    bool m_ShowTerrain = true;
+    bool m_ShowEvents = true;
+    bool m_ShowLog = true;
     bool m_WantsOverlay = false;
     float m_WindowAlpha = 0.9f;
     std::chrono::steady_clock::time_point m_LastInventoryScan;

@@ -70,23 +70,42 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
     if (ImGui::CollapsingHeader("Item Mods (Nearby Items)")) {
         int shown = 0;
         for (const auto& entity : snapshot.Entities) {
-            if (entity.EntitySubtype != PluginSDK::EntitySubtype::InventoryItem &&
-                entity.EntitySubtype != PluginSDK::EntitySubtype::WorldItem)
-                continue;
+            // Accept any entity with a Mods component (world items, chests
+            // with mods, expedition logbooks, etc.). The earlier
+            // EntitySubtype-only filter was too narrow — dropped items on
+            // the ground sometimes arrive with EntitySubtype unset by the
+            // host classifier.
             if (!entity.Components.HasMods()) continue;
+            if (entity.EntityType != PluginSDK::EntityType::Item &&
+                entity.EntityType != PluginSDK::EntityType::Chest)
+                continue;
 
             auto mods = ctx->Components.ReadMods(entity.Components.Mods);
             if (!mods.Valid) continue;
 
-            ImGui::Text("Rarity: %d, iLvl: %d, CraftedMods: %d",
-                mods.Rarity, mods.ItemLevel, mods.CraftedModCount);
+            const char* typeName = (entity.EntityType == PluginSDK::EntityType::Item)
+                                       ? "Item" : "Chest";
+            // Components.ReadMods returns only the summary (flags + counts).
+            // For the actual mod lists, fetch via Inventory.ReadItemMods on
+            // the entity address — that returns ItemMods with Implicit /
+            // Explicit / Enchant / Hellscape / Crucible vectors.
+            auto itemMods = ctx->Inventory.ReadItemMods(entity.Address);
+            ImGui::Text("[%s id=%u] Rarity=%d iLvl=%d CraftedMods=%d "
+                        "implicits=%zu explicits=%zu",
+                typeName, entity.Id,
+                mods.Rarity, mods.ItemLevel, mods.CraftedModCount,
+                itemMods.Valid ? itemMods.ImplicitMods.size() : 0u,
+                itemMods.Valid ? itemMods.ExplicitMods.size() : 0u);
 
             if (++shown >= 15) {
                 ImGui::TextDisabled("... (more items omitted)");
                 break;
             }
         }
-        if (shown == 0) ImGui::TextDisabled("No items with Mods component");
+        if (shown == 0) {
+            ImGui::TextDisabled("No nearby items or chests with Mods. Try dropping "
+                                 "an item on the ground, or walk near a chest.");
+        }
     }
 
     if (ImGui::CollapsingHeader("UI Navigation Demo")) {
