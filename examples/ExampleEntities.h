@@ -1,197 +1,180 @@
 #pragma once
-#include "../sdk/PluginHelpers.h"
+// ============================================================================
+// ExampleEntities.h — v6 SDK
+// ============================================================================
+// Walks the snapshot's entity list with filtering. For each entity, lets the
+// user toggle a "watch" so the host can keep its component data hot, then
+// reads component data through ctx->Components.ReadXxx().
+// ============================================================================
+
+#include "sdk/PluginSDK.h"
+#include <imgui.h>
 #include <algorithm>
-#include <sstream>
+#include <cstring>
+#include <cstdio>
 #include <limits>
+#include <sstream>
 
 namespace Examples {
 
-// --- Component detail renderers (must be defined before DrawEntitiesPanel) ---
+// --- Per-component renderers (v6 PluginSDK:: types) -------------------------
 
 inline void DrawAddressRow(const char* label, uintptr_t addr) {
     ImGui::TableNextRow();
     ImGui::TableNextColumn(); ImGui::Text("%s", label);
     ImGui::TableNextColumn();
-    char buf[20]; snprintf(buf, sizeof(buf), "0x%llX", addr);
+    char buf[20]; snprintf(buf, sizeof(buf), "0x%llX", static_cast<unsigned long long>(addr));
     ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.6f, 1.0f), "%s", buf);
     if (ImGui::IsItemHovered() && ImGui::IsItemClicked()) ImGui::SetClipboardText(buf);
 }
 
-inline void DrawLifeComp(const PluginSDK::DebugLifeComp& cl, uint32_t entityId) {
-    if (ImGui::BeginTable("LifeT", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
-        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        DrawAddressRow("Address", cl.Address);
-        DrawAddressRow("Owner Address", cl.OwnerAddress);
-        ImGui::EndTable();
-    }
+inline void DrawVital(const char* label, const PluginSDK::Vital& v) {
+    if (ImGui::TreeNode(label)) {
+        if (ImGui::BeginTable("VitalT", 2,
+            ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
-    auto renderVital = [](const char* vlabel, const PluginSDK::DebugVital& v) {
-        if (ImGui::TreeNode(vlabel)) {
-            if (ImGui::BeginTable("VitalT", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
-                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn(); ImGui::Text("Regeneration");
+            ImGui::TableNextColumn(); ImGui::Text("%.4f", v.Regeneration);
 
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn(); ImGui::Text("Total");
+            ImGui::TableNextColumn(); ImGui::Text("%d", v.Total);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn(); ImGui::Text("ReservedFlat");
+            ImGui::TableNextColumn(); ImGui::Text("%d", v.ReservedFlat);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn(); ImGui::Text("Current");
+            ImGui::TableNextColumn(); ImGui::Text("%d", v.Current);
+
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn(); ImGui::Text("Reserved(%%)");
+            ImGui::TableNextColumn(); ImGui::Text("%d", v.ReservedPercent);
+
+            if (v.Total > 0) {
+                float pct = static_cast<float>(v.Current) / v.Total * 100.0f;
                 ImGui::TableNextRow();
-                ImGui::TableNextColumn(); ImGui::Text("Regeneration");
-                ImGui::TableNextColumn(); ImGui::Text("%.4f", v.Regeneration);
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn(); ImGui::Text("Total");
-                ImGui::TableNextColumn(); ImGui::Text("%d", v.Total);
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn(); ImGui::Text("ReservedFlat");
-                ImGui::TableNextColumn(); ImGui::Text("%d", v.ReservedFlat);
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn(); ImGui::Text("Current");
-                ImGui::TableNextColumn(); ImGui::Text("%d", v.Current);
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn(); ImGui::Text("Reserved(%%)");
-                ImGui::TableNextColumn(); ImGui::Text("%d", v.ReservedPercent);
-
-                if (v.Total > 0) {
-                    float pct = static_cast<float>(v.Current) / v.Total * 100.0f;
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn(); ImGui::Text("Current(%%)");
-                    ImGui::TableNextColumn(); ImGui::Text("%.1f%%", pct);
-                }
-                ImGui::EndTable();
+                ImGui::TableNextColumn(); ImGui::Text("Current(%%)");
+                ImGui::TableNextColumn(); ImGui::Text("%.1f%%", pct);
             }
-            ImGui::TreePop();
+            ImGui::EndTable();
         }
-    };
-    renderVital("Health", cl.Health);
-    renderVital("Energy Shield", cl.EnergyShield);
-    renderVital("Mana", cl.Mana);
+        ImGui::TreePop();
+    }
 }
 
-inline void DrawRenderComp(const PluginSDK::DebugRenderComp& cr) {
-    if (ImGui::BeginTable("RenderT", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+inline void DrawLifeComp(const PluginSDK::Life& l) {
+    if (ImGui::BeginTable("LifeT", 2,
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        DrawAddressRow("Address", cr.Address);
-        DrawAddressRow("Owner Address", cr.OwnerAddress);
+        DrawAddressRow("Address", l.Address);
+        DrawAddressRow("Owner Address", l.OwnerAddress);
         ImGui::EndTable();
     }
-    ImGui::Text("Grid Position: {%.2f, %.2f}", cr.GridX, cr.GridY);
-    ImGui::Text("World Position: {%.2f, %.2f, %.2f}", cr.WorldX, cr.WorldY, cr.WorldZ);
-    if (ImGui::BeginTable("RenderT2", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+    DrawVital("Health", l.Health);
+    DrawVital("Energy Shield", l.EnergyShield);
+    DrawVital("Mana", l.Mana);
+}
+
+inline void DrawRenderComp(const PluginSDK::Render& r) {
+    if (ImGui::BeginTable("RenderT", 2,
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        DrawAddressRow("Address", r.Address);
+        DrawAddressRow("Owner Address", r.OwnerAddress);
+        ImGui::EndTable();
+    }
+    ImGui::Text("World Position: {%.2f, %.2f, %.2f}", r.WorldX, r.WorldY, r.WorldZ);
+    ImGui::Text("Terrain Height: %.4f", r.TerrainHeight);
+    ImGui::Text("Model Bounds: {%.2f, %.2f, %.2f}", r.ModelBoundsX, r.ModelBoundsY, r.ModelBoundsZ);
+}
+
+inline void DrawPositionedComp(const PluginSDK::Positioned& p) {
+    if (ImGui::BeginTable("PosT", 2,
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        DrawAddressRow("Address", p.Address);
+        DrawAddressRow("Owner Address", p.OwnerAddress);
+
         ImGui::TableNextRow();
-        ImGui::TableNextColumn(); ImGui::Text("Terrain Height (Z-Axis)");
-        ImGui::TableNextColumn(); ImGui::Text("%.4f", cr.TerrainHeight);
-        ImGui::EndTable();
-    }
-    ImGui::Text("Model Bounds: {%.2f, %.2f, %.2f}", cr.ModelBoundsX, cr.ModelBoundsY, cr.ModelBoundsZ);
-}
+        ImGui::TableNextColumn(); ImGui::Text("Reaction");
+        ImGui::TableNextColumn(); ImGui::Text("0x%02X", p.Reaction);
 
-inline void DrawPositionedComp(const PluginSDK::DebugPositionedComp& cp) {
-    if (ImGui::BeginTable("PosT", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
-        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        DrawAddressRow("Address", cp.Address);
-        DrawAddressRow("Owner Address", cp.OwnerAddress);
-        ImGui::EndTable();
-    }
-    ImGui::Text("Flags: 0x%02X", cp.Reaction);
-    if (ImGui::BeginTable("PosT2", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
-        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableNextRow();
         ImGui::TableNextColumn(); ImGui::Text("IsFriendly");
-        ImGui::TableNextColumn(); ImGui::TextColored(cp.IsFriendly ? ImVec4(0.3f,1,0.3f,1) : ImVec4(1,0.3f,0.3f,1), cp.IsFriendly ? "true" : "false");
+        ImGui::TableNextColumn();
+        ImGui::TextColored(p.IsFriendly ? ImVec4(0.3f,1,0.3f,1) : ImVec4(1,0.3f,0.3f,1),
+                           p.IsFriendly ? "true" : "false");
         ImGui::EndTable();
     }
 }
 
-inline void DrawTargetableComp(const PluginSDK::DebugTargetableComp& ct) {
-    if (ImGui::BeginTable("TgtT", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+inline void DrawTargetableComp(const PluginSDK::Targetable& t) {
+    if (ImGui::BeginTable("TgtT", 2,
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        DrawAddressRow("Address", ct.Address);
-        DrawAddressRow("Owner Address", ct.OwnerAddress);
-
         auto boolRow = [](const char* name, bool val) {
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); ImGui::Text("%s", name);
-            ImGui::TableNextColumn(); ImGui::TextColored(val ? ImVec4(0.3f,1,0.3f,1) : ImVec4(1,0.3f,0.3f,1), val ? "true" : "false");
+            ImGui::TableNextColumn();
+            ImGui::TextColored(val ? ImVec4(0.3f,1,0.3f,1) : ImVec4(1,0.3f,0.3f,1),
+                               val ? "true" : "false");
         };
-        boolRow("IsHighlightable", ct.IsHighlightable);
-        boolRow("IsTargettedByPlayer", ct.IsTargettedByPlayer);
-        boolRow("IsTargetable", ct.IsTargetable);
-        boolRow("HiddenFromPlayer", ct.HiddenFromPlayer);
-        boolRow("MeetsQuestState", ct.MeetsQuestState);
-        boolRow("MeetsItemRequirements", ct.MeetsItemRequirements);
+        boolRow("IsTargetable", t.IsTargetable);
+        boolRow("IsHighlightable", t.IsHighlightable);
+        boolRow("IsTargetedByPlayer", t.IsTargetedByPlayer);
+        boolRow("HiddenFromPlayer", t.HiddenFromPlayer);
+        boolRow("MeetsQuestState", t.MeetsQuestState);
+        boolRow("MeetsItemRequirements", t.MeetsItemRequirements);
         ImGui::EndTable();
     }
 }
 
-inline void DrawAnimatedComp(const PluginSDK::DebugAnimatedComp& ca) {
-    if (ImGui::BeginTable("AnimT", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+inline void DrawAnimatedComp(const PluginSDK::Animated& a) {
+    if (ImGui::BeginTable("AnimT", 2,
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        DrawAddressRow("Address", ca.Address);
-        DrawAddressRow("Owner Address", ca.OwnerAddress);
         ImGui::TableNextRow();
         ImGui::TableNextColumn(); ImGui::Text("Path");
-        ImGui::TableNextColumn(); ImGui::TextWrapped("%s", ca.Path.c_str());
+        ImGui::TableNextColumn(); ImGui::TextWrapped("%s", a.Path.c_str());
         ImGui::TableNextRow();
         ImGui::TableNextColumn(); ImGui::Text("Id");
-        ImGui::TableNextColumn(); ImGui::Text("%u", ca.Id);
+        ImGui::TableNextColumn(); ImGui::Text("%u", a.Id);
         ImGui::EndTable();
     }
 }
 
-inline void DrawStatsComp(const PluginSDK::DebugStatsComp& cs, uint32_t entityId) {
-    if (ImGui::BeginTable("StatsT", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+inline void DrawActorComp(const PluginSDK::Actor& a,
+                          const std::vector<PluginSDK::ActiveSkill>& skills,
+                          uint32_t entityId) {
+    if (ImGui::BeginTable("ActorT", 2,
+        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        DrawAddressRow("Address", cs.Address);
-        DrawAddressRow("Owner Address", cs.OwnerAddress);
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn(); ImGui::Text("CurrentWeaponIndex");
-        ImGui::TableNextColumn(); ImGui::Text("%d", cs.CurrentWeaponIndex);
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn(); ImGui::Text("IsInShapeshiftedForm");
-        ImGui::TableNextColumn(); ImGui::TextColored(cs.IsShapeshifted ? ImVec4(0.3f,1,0.3f,1) : ImVec4(1,0.3f,0.3f,1), cs.IsShapeshifted ? "true" : "false");
-        ImGui::EndTable();
-    }
-    char treeId[32];
-    snprintf(treeId, sizeof(treeId), "Items##si%u", entityId);
-    if (ImGui::TreeNode(treeId)) {
-        for (const auto& [k, v] : cs.StatsItems)
-            ImGui::Text("[%d]: %d", k, v);
-        ImGui::TreePop();
-    }
-    snprintf(treeId, sizeof(treeId), "BuffAndActions##sb%u", entityId);
-    if (ImGui::TreeNode(treeId)) {
-        for (const auto& [k, v] : cs.StatsBuff)
-            ImGui::Text("[%d]: %d", k, v);
-        ImGui::TreePop();
-    }
-}
-
-inline void DrawActorComp(const PluginSDK::DebugActorComp& cac, uint32_t entityId) {
-    if (ImGui::BeginTable("ActorT", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
-        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        DrawAddressRow("Address", cac.Address);
-        DrawAddressRow("Owner Address", cac.OwnerAddress);
         ImGui::TableNextRow();
         ImGui::TableNextColumn(); ImGui::Text("Animation");
-        ImGui::TableNextColumn(); ImGui::Text("%s", cac.AnimationName.c_str());
+        ImGui::TableNextColumn(); ImGui::Text("%s", a.AnimationName.c_str());
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn(); ImGui::Text("AnimationId");
+        ImGui::TableNextColumn(); ImGui::Text("%d", a.AnimationId);
         ImGui::EndTable();
     }
     char treeId[32];
-    snprintf(treeId, sizeof(treeId), "Skills##as%u", entityId);
-    if (!cac.ActiveSkills.empty() && ImGui::TreeNode(treeId)) {
-        for (const auto& skill : cac.ActiveSkills) {
+    snprintf(treeId, sizeof(treeId), "Skills (%zu)##as%u", skills.size(), entityId);
+    if (!skills.empty() && ImGui::TreeNode(treeId)) {
+        for (const auto& skill : skills) {
             if (ImGui::TreeNode(skill.Name.c_str())) {
-                if (ImGui::BeginTable("SkillT", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+                if (ImGui::BeginTable("SkillT", 2,
+                    ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
                     ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
                     ImGui::TableNextRow();
@@ -205,10 +188,12 @@ inline void DrawActorComp(const PluginSDK::DebugActorComp& cac, uint32_t entityI
                     ImGui::TableNextColumn(); ImGui::Text("%d", skill.TotalUses);
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn(); ImGui::Text("Cooldown Time (ms)");
-                    ImGui::TableNextColumn(); ImGui::Text("%d", skill.TotalCooldownTimeInMs);
+                    ImGui::TableNextColumn(); ImGui::Text("%d", skill.TotalCooldownMs);
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn(); ImGui::Text("Can Be Used");
-                    ImGui::TableNextColumn(); ImGui::TextColored(skill.CanBeUsed ? ImVec4(0.3f,1,0.3f,1) : ImVec4(1,0.3f,0.3f,1), skill.CanBeUsed ? "true" : "false");
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(skill.CanBeUsed ? ImVec4(0.3f,1,0.3f,1) : ImVec4(1,0.3f,0.3f,1),
+                                       skill.CanBeUsed ? "true" : "false");
                     ImGui::EndTable();
                 }
                 ImGui::TreePop();
@@ -216,24 +201,17 @@ inline void DrawActorComp(const PluginSDK::DebugActorComp& cac, uint32_t entityI
         }
         ImGui::TreePop();
     }
-    snprintf(treeId, sizeof(treeId), "Deployed##dp%u", entityId);
-    if (ImGui::TreeNode(treeId)) {
-        for (int i = 0; i < 256; i++) {
-            if (cac.DeployedCounts[i] > 0)
-                ImGui::Text("Object Type: %d, Total Count: %d", i, cac.DeployedCounts[i]);
-        }
-        ImGui::TreePop();
-    }
 }
 
-inline void DrawBuffsComp(const std::vector<PluginSDK::DebugBuff>& buffs, uint32_t entityId) {
+inline void DrawBuffsComp(const std::vector<PluginSDK::Buff>& buffs, uint32_t entityId) {
     ImGui::Text("Effects: %zu", buffs.size());
     char treeId[32];
     snprintf(treeId, sizeof(treeId), "Effects##bf%u", entityId);
     if (!buffs.empty() && ImGui::TreeNode(treeId)) {
         for (const auto& buff : buffs) {
             if (ImGui::TreeNode(buff.Name.c_str())) {
-                if (ImGui::BeginTable("BuffT", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+                if (ImGui::BeginTable("BuffT", 2,
+                    ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
                     ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
                     ImGui::TableNextRow();
@@ -241,10 +219,14 @@ inline void DrawBuffsComp(const std::vector<PluginSDK::DebugBuff>& buffs, uint32
                     ImGui::TableNextColumn(); ImGui::Text("%s", buff.Name.c_str());
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn(); ImGui::Text("Total Time");
-                    ImGui::TableNextColumn(); ImGui::Text("%.2f", buff.TotalTime > 0 ? buff.TotalTime : std::numeric_limits<float>::infinity());
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%.2f", buff.TotalTime > 0
+                        ? buff.TotalTime : std::numeric_limits<float>::infinity());
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn(); ImGui::Text("Time Left");
-                    ImGui::TableNextColumn(); ImGui::Text("%.2f", buff.TimeLeft > 0 ? buff.TimeLeft : std::numeric_limits<float>::infinity());
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%.2f", buff.TimeLeft > 0
+                        ? buff.TimeLeft : std::numeric_limits<float>::infinity());
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn(); ImGui::Text("Source Entity Id");
                     ImGui::TableNextColumn(); ImGui::Text("%u", buff.SourceEntityId);
@@ -255,7 +237,7 @@ inline void DrawBuffsComp(const std::vector<PluginSDK::DebugBuff>& buffs, uint32
                     ImGui::TableNextColumn(); ImGui::Text("Source FlaskSlot");
                     ImGui::TableNextColumn(); ImGui::Text("%d", buff.FlaskSlot);
                     ImGui::TableNextRow();
-                    ImGui::TableNextColumn(); ImGui::Text("Source Effectiveness");
+                    ImGui::TableNextColumn(); ImGui::Text("Effectiveness");
                     ImGui::TableNextColumn(); ImGui::Text("%d", 100 + buff.Effectiveness);
                     ImGui::EndTable();
                 }
@@ -266,43 +248,77 @@ inline void DrawBuffsComp(const std::vector<PluginSDK::DebugBuff>& buffs, uint32
     }
 }
 
-// ============================================================================
-// Main entity list panel — matches Debug->Entity List
-// ============================================================================
+// ----------------------------------------------------------------------------
+// Type-name helpers
+// ----------------------------------------------------------------------------
 
-inline void DrawEntitiesPanel(PluginContext* ctx) {
-    using namespace PluginSDK;
-
-    if (!ctx || !ctx->GetEntityDebugList) {
-        ImGui::TextDisabled("Entity debug API not available (requires SDK v4)");
-        return;
+inline const char* EntityTypeName(PluginSDK::EntityType t) {
+    using E = PluginSDK::EntityType;
+    switch (t) {
+        case E::Chest:             return "Chest";
+        case E::NPC:               return "NPC";
+        case E::Player:            return "Player";
+        case E::Shrine:            return "Shrine";
+        case E::Monster:           return "Monster";
+        case E::DeliriumBomb:      return "DeliriumBomb";
+        case E::DeliriumSpawner:   return "DeliriumSpawner";
+        case E::OtherImportant:    return "Important";
+        case E::Item:              return "Item";
+        case E::Renderable:        return "Renderable";
+        case E::AreaTransition:    return "Transition";
+        case E::ExpeditionMarker:  return "Expedition";
+        case E::ExpeditionRemnant: return "Remnant";
+        default:                   return "Unknown";
     }
+}
 
-    auto entityList = ctx->GetEntityDebugList();
-    ImGui::Text("Total: %zu entities", entityList.size());
+inline const char* NearbyZoneName(PluginSDK::NearbyZone z) {
+    using Z = PluginSDK::NearbyZone;
+    switch (z) {
+        case Z::InnerCircle: return "Inner";
+        case Z::OuterCircle: return "Outer";
+        case Z::Far:         return "Far";
+        default:             return "None";
+    }
+}
 
-    // --- Filters ---
+// ----------------------------------------------------------------------------
+// Main entity panel — walks snapshot.Entities directly (no v5 Watch list)
+// ----------------------------------------------------------------------------
+
+inline void DrawEntitiesPanel(const PluginSDK::Context* ctx,
+                              const PluginSDK::Snapshot& snapshot) {
+    if (!ctx) return;
+
+    ImGui::Text("Total: %zu entities", snapshot.Entities.size());
+
     static char idFilter[32] = "";
     static char pathFilter[128] = "";
     static int typeFilter = -1;
     ImGui::InputText("Filter by Id", idFilter, sizeof(idFilter));
     ImGui::InputText("Filter by Path", pathFilter, sizeof(pathFilter));
 
-    const char* typeNames[] = { "All", "Monster", "NPC", "Chest", "Player", "Item",
-        "Shrine", "AreaTransition", "Renderable", "DeliriumSpawner", "DeliriumBomb", "Unidentified" };
+    const char* typeNames[] = {
+        "All", "Unidentified", "Chest", "NPC", "Player", "Shrine", "Monster",
+        "DeliriumBomb", "DeliriumSpawner", "Important", "Item", "Renderable",
+        "AreaTransition", "ExpeditionMarker", "ExpeditionRemnant"
+    };
     ImGui::Combo("Filter by Type", &typeFilter, typeNames, IM_ARRAYSIZE(typeNames));
 
     int shown = 0;
-    for (const auto& e : entityList) {
-        // Apply filters
+    for (const auto& e : snapshot.Entities) {
+        std::string pathNarrow;
+        pathNarrow.reserve(e.Path.size());
+        for (wchar_t c : e.Path) pathNarrow += (c < 128) ? static_cast<char>(c) : '?';
+
         if (idFilter[0] != '\0') {
             char idStr[16]; snprintf(idStr, sizeof(idStr), "%u", e.Id);
-            if (strstr(idStr, idFilter) == nullptr) continue;
+            if (std::strstr(idStr, idFilter) == nullptr) continue;
         }
         if (pathFilter[0] != '\0') {
-            if (e.Path.find(pathFilter) == std::string::npos) continue;
+            if (pathNarrow.find(pathFilter) == std::string::npos) continue;
         }
-        if (typeFilter > 0 && e.EntityType != (typeFilter - 1)) continue;
+        if (typeFilter > 0 && static_cast<int>(e.EntityType) != (typeFilter - 1)) continue;
 
         shown++;
         if (shown > 500) {
@@ -311,10 +327,13 @@ inline void DrawEntitiesPanel(PluginContext* ctx) {
         }
 
         char nodeLabel[256];
-        snprintf(nodeLabel, sizeof(nodeLabel), "%u %s##ent%u", e.Id, e.Path.c_str(), e.Id);
+        snprintf(nodeLabel, sizeof(nodeLabel), "%u %s##ent%u",
+                 e.Id, pathNarrow.c_str(), e.Id);
+
         if (ImGui::TreeNode(nodeLabel)) {
-            // Entity properties table
-            if (ImGui::BeginTable("EntProps", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+            // Entity properties
+            if (ImGui::BeginTable("EntProps", 2,
+                ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
                 ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 220.0f);
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableHeadersRow();
@@ -327,19 +346,19 @@ inline void DrawEntitiesPanel(PluginContext* ctx) {
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn(); ImGui::Text("Path");
-                ImGui::TableNextColumn(); ImGui::TextWrapped("%s", e.Path.c_str());
+                ImGui::TableNextColumn(); ImGui::TextWrapped("%s", pathNarrow.c_str());
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn(); ImGui::Text("Entity Type");
-                ImGui::TableNextColumn(); ImGui::Text("%d", e.EntityType);
+                ImGui::TableNextColumn(); ImGui::Text("%s", EntityTypeName(e.EntityType));
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn(); ImGui::Text("Entity SubType");
-                ImGui::TableNextColumn(); ImGui::Text("%d", e.EntitySubType);
+                ImGui::TableNextColumn(); ImGui::Text("%d", static_cast<int>(e.EntitySubtype));
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn(); ImGui::Text("Entity State");
-                ImGui::TableNextColumn(); ImGui::Text("%d", e.EntityState);
+                ImGui::TableNextColumn(); ImGui::Text("%d", static_cast<int>(e.EntityState));
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn(); ImGui::Text("Rarity");
@@ -347,108 +366,59 @@ inline void DrawEntitiesPanel(PluginContext* ctx) {
 
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn(); ImGui::Text("Nearby Zone");
+                ImGui::TableNextColumn(); ImGui::Text("%s", NearbyZoneName(e.Zone));
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn(); ImGui::Text("World");
                 ImGui::TableNextColumn();
-                const char* zoneNames[] = { "None", "InnerCircle", "OuterCircle", "Far" };
-                int zi = static_cast<int>(e.Zone);
-                ImGui::Text("%s", (zi >= 0 && zi < 4) ? zoneNames[zi] : "Unknown");
+                ImGui::Text("%.0f, %.0f, %.0f", e.WorldX, e.WorldY, e.WorldZ);
 
                 ImGui::EndTable();
             }
 
-            // JSON dump button
-            {
-                char btnId[32];
-                snprintf(btnId, sizeof(btnId), "Copy JSON##json%u", e.Id);
-                if (ImGui::SmallButton(btnId)) {
-                    std::ostringstream js;
-                    js << "{\n";
-                    js << "  \"Id\": " << e.Id << ",\n";
-                    js << "  \"Address\": \"0x" << std::hex << e.Address << std::dec << "\",\n";
-                    js << "  \"Path\": \"" << e.Path << "\",\n";
-                    js << "  \"EntityType\": " << e.EntityType << ",\n";
-                    js << "  \"EntitySubType\": " << e.EntitySubType << ",\n";
-                    js << "  \"EntityState\": " << e.EntityState << ",\n";
-                    js << "  \"Rarity\": " << e.Rarity << ",\n";
-                    js << "  \"Components\": {\n";
-                    for (size_t ci = 0; ci < e.ComponentAddresses.size(); ci++) {
-                        js << "    \"" << e.ComponentAddresses[ci].first << "\": \"0x"
-                           << std::hex << e.ComponentAddresses[ci].second << std::dec << "\"";
-                        if (ci + 1 < e.ComponentAddresses.size()) js << ",";
-                        js << "\n";
-                    }
-                    js << "  }\n}";
-                    ImGui::SetClipboardText(js.str().c_str());
-                }
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Copy entity data as JSON to clipboard");
-            }
-
-            // Components tree (lazy loaded via watch mechanism)
+            // Component readers — only call if the component exists on the entity
             char compLabel[64];
-            snprintf(compLabel, sizeof(compLabel), "Components (%zu)##comp%u", e.ComponentAddresses.size(), e.Id);
-            bool compOpen = ImGui::TreeNode(compLabel);
-            if (compOpen) {
-                ctx->WatchEntity(e.Id);
+            snprintf(compLabel, sizeof(compLabel), "Components##comp%u", e.Id);
+            if (ImGui::TreeNode(compLabel)) {
+                const auto& c = e.Components;
 
-                auto ec = ctx->GetWatchedEntityData(e.Id);
-                bool hasData = ec.Valid;
-
-                if (!hasData) {
-                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.3f, 1.0f), "Loading...");
+                if (c.HasLife() && ImGui::TreeNode("Life")) {
+                    DrawLifeComp(ctx->Components.ReadLife(c.Life));
+                    ImGui::TreePop();
                 }
-
-                for (const auto& [compName, compAddr] : e.ComponentAddresses) {
-                    bool rendered = false;
-                    if (hasData) {
-                        if (compName == "Life" && ec.HasLife) {
-                            if (ImGui::TreeNode("Life")) { DrawLifeComp(ec.Life, e.Id); ImGui::TreePop(); }
-                            rendered = true;
-                        }
-                        else if (compName == "Render" && ec.HasRender) {
-                            if (ImGui::TreeNode("Render")) { DrawRenderComp(ec.Render); ImGui::TreePop(); }
-                            rendered = true;
-                        }
-                        else if (compName == "Positioned" && ec.HasPositioned) {
-                            if (ImGui::TreeNode("Positioned")) { DrawPositionedComp(ec.Positioned); ImGui::TreePop(); }
-                            rendered = true;
-                        }
-                        else if (compName == "Targetable" && ec.HasTargetable) {
-                            if (ImGui::TreeNode("Targetable")) { DrawTargetableComp(ec.Targetable); ImGui::TreePop(); }
-                            rendered = true;
-                        }
-                        else if (compName == "Animated" && ec.HasAnimated) {
-                            if (ImGui::TreeNode("Animated")) { DrawAnimatedComp(ec.Animated); ImGui::TreePop(); }
-                            rendered = true;
-                        }
-                        else if (compName == "Stats" && ec.HasStats) {
-                            if (ImGui::TreeNode("Stats")) { DrawStatsComp(ec.Stats, e.Id); ImGui::TreePop(); }
-                            rendered = true;
-                        }
-                        else if (compName == "Actor" && ec.HasActor) {
-                            if (ImGui::TreeNode("Actor")) { DrawActorComp(ec.Actor, e.Id); ImGui::TreePop(); }
-                            rendered = true;
-                        }
-                        else if (compName == "Buffs" && ec.HasBuffs) {
-                            if (ImGui::TreeNode("Buffs")) { DrawBuffsComp(ec.Buffs, e.Id); ImGui::TreePop(); }
-                            rendered = true;
-                        }
-                    }
-
-                    if (!rendered) {
-                        char unknownLabel[128];
-                        snprintf(unknownLabel, sizeof(unknownLabel), "%s: 0x%llX", compName.c_str(), compAddr);
-                        ImGui::TextDisabled("%s", unknownLabel);
-                    }
+                if (c.HasRender() && ImGui::TreeNode("Render")) {
+                    DrawRenderComp(ctx->Components.ReadRender(c.Render));
+                    ImGui::TreePop();
                 }
-
+                if (c.HasPositioned() && ImGui::TreeNode("Positioned")) {
+                    DrawPositionedComp(ctx->Components.ReadPositioned(c.Positioned));
+                    ImGui::TreePop();
+                }
+                if (c.HasTargetable() && ImGui::TreeNode("Targetable")) {
+                    DrawTargetableComp(ctx->Components.ReadTargetable(c.Targetable));
+                    ImGui::TreePop();
+                }
+                if (c.HasAnimated() && ImGui::TreeNode("Animated")) {
+                    DrawAnimatedComp(ctx->Components.ReadAnimated(c.Animated));
+                    ImGui::TreePop();
+                }
+                if (c.HasActor() && ImGui::TreeNode("Actor")) {
+                    DrawActorComp(ctx->Components.ReadActor(c.Actor),
+                                  ctx->Components.EnumerateActiveSkills(c.Actor),
+                                  e.Id);
+                    ImGui::TreePop();
+                }
+                if (c.HasBuffs() && ImGui::TreeNode("Buffs")) {
+                    DrawBuffsComp(ctx->Components.EnumerateBuffs(c.Buffs), e.Id);
+                    ImGui::TreePop();
+                }
                 ImGui::TreePop();
-            } else {
-                ctx->UnwatchEntity(e.Id);
             }
 
             ImGui::TreePop();
         }
     }
-    if (shown == 0 && !entityList.empty()) {
+    if (shown == 0 && !snapshot.Entities.empty()) {
         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No entities match filter");
     }
 }

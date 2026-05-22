@@ -1,12 +1,30 @@
 #pragma once
-#include "../sdk/PluginHelpers.h"
+// ============================================================================
+// ExampleBuffs.h — v6 SDK
+// ============================================================================
+// Demonstrates reading the player's Buffs component and rendering a list with
+// progress bars and filtering. Uses ctx->Components.EnumerateBuffs() on the
+// Buffs component address found on the player's component cache.
+// ============================================================================
+
+#include "sdk/PluginSDK.h"
+#include <imgui.h>
 
 namespace Examples {
 
-// Renders a detailed buff list with expandable details
-inline void DrawBuffsPanel(const std::shared_ptr<const PluginSDK::PluginGameSnapshot>& snapshot) {
-    auto& buffs = snapshot->Vitals.Buffs;
-    ImGui::Text("Active Buffs: %d", (int)buffs.size());
+inline void DrawBuffsPanel(const PluginSDK::Context* ctx,
+                           const PluginSDK::Snapshot& snapshot) {
+    if (!ctx) return;
+
+    if (!snapshot.Player.Components.HasBuffs()) {
+        ImGui::TextDisabled("Player has no Buffs component");
+        return;
+    }
+
+    std::vector<PluginSDK::Buff> buffs =
+        ctx->Components.EnumerateBuffs(snapshot.Player.Components.Buffs);
+
+    ImGui::Text("Active Buffs: %d", static_cast<int>(buffs.size()));
 
     if (buffs.empty()) {
         ImGui::TextDisabled("No active buffs");
@@ -28,7 +46,7 @@ inline void DrawBuffsPanel(const std::shared_ptr<const PluginSDK::PluginGameSnap
         ImGui::TableSetupColumn("Progress", ImGuiTableColumnFlags_WidthFixed, 100);
         ImGui::TableHeadersRow();
 
-        for (auto& b : buffs) {
+        for (const auto& b : buffs) {
             if (buffFilter[0] != '\0') {
                 if (b.Name.find(buffFilter) == std::string::npos) continue;
             }
@@ -36,7 +54,6 @@ inline void DrawBuffsPanel(const std::shared_ptr<const PluginSDK::PluginGameSnap
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
 
-            // Colorize persistent vs timed buffs
             if (b.TotalTime <= 0) {
                 ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "%s", b.Name.c_str());
             } else {

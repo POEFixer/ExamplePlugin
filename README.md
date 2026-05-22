@@ -1,6 +1,6 @@
 # ExamplePlugin — POE2Fixer Plugin SDK Example
 
-A reference plugin demonstrating all features of the POE2Fixer Plugin SDK (v5). Use this as a starting point for building your own plugins.
+A reference plugin demonstrating all features of the POE2Fixer Plugin SDK (v6). Use this as a starting point for building your own plugins.
 
 ## What It Does
 
@@ -21,8 +21,14 @@ Demonstrates direct game memory reading through the SDK. Includes a hex dump vie
 ### UI Explorer
 Navigates the game's full UI element tree. Shows element properties (position, size, flags, type, scale, StringId, text content), recursive parent chain, and child traversal. Includes search by StringId and visual highlighting of selected elements on screen.
 
-### Component Reader (SDK v5)
-Demonstrates the new SDK v5 Component Reader API and UI Element API. Reads Life, Render, and Mods components directly from entity addresses without hardcoded offsets. Shows UI tree navigation using `GetUiChildren`, `ReadUiElement`, and `ComputeUiScreenRect`. Demonstrates convenience helpers like `GetHealthPercent`, `IsAlive`, `GetPlayerNameHelper`.
+### Component Reader (SDK v6)
+Demonstrates the SDK v6 Component Reader API and UI Element API. Exercises all 22 component readers, 4 enumerators, and 10 convenience helpers directly from entity addresses without hardcoded offsets. Shows UI tree navigation using `GetUiChildren`, `ReadUiElement`, and `ComputeUiScreenRect`. Demonstrates helpers like `GetHealthPercent`, `IsAlive`, `GetPlayerName`, `GetItemRarity`, `IsItemIdentified`, `GetStackCount`.
+
+### Render, Terrain, Events, Log tabs
+Exercise the remaining service surface: WorldToScreen + map projection, walkable/height grid + TgtLocation enumeration, OnFrame/OnAreaChange/OnGameAttached/OnGameDetached event hooks with live counters, and Log.Debug/Info/Warn/Error fire buttons.
+
+### SDK Coverage Summary
+The settings tab shows a `SDK Coverage: N/10 services responding` banner above the tab bar. Hover for per-service status (Game, Entities, Components, Inventory, Ui, Render, Terrain, Memory, Log, Events).
 
 ## Build
 
@@ -44,7 +50,7 @@ Copy `ExamplePlugin.dll` to `Plugins/ExamplePlugin/` in your POE2Fixer directory
 ## Project Structure
 
 ```
-sdk/            Plugin SDK headers (PluginAPI.h, PluginContext.h, PluginGameData.h, PluginHelpers.h)
+sdk/            Plugin SDK headers (PluginAbi.h, PluginSDK.h)
 imgui/          ImGui library (headers + sources, compiled into the DLL)
 examples/       Example tab implementations
 ExamplePlugin.cpp   Main plugin entry point — routes to example tabs
@@ -54,6 +60,6 @@ ExamplePlugin.cpp   Main plugin entry point — routes to example tabs
 
 1. Copy this project as a template
 2. Rename the .sln, .vcxproj, and main .cpp
-3. Implement the `IPlugin` interface (see `ExamplePlugin.cpp`)
-4. Use `PluginContext` function pointers to access game data
+3. Subclass `PluginSDK::Plugin` and override the lifecycle hooks (see `ExamplePlugin.cpp`)
+4. Use `ctx()->Service.Method(...)` to access game data (Game, Entities, Components, Inventory, Ui, Render, Terrain, Memory, Log, Events)
 5. Build and copy the DLL to `Plugins/YourPlugin/`

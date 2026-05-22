@@ -1,45 +1,55 @@
 #pragma once
-#include "../sdk/PluginHelpers.h"
+// ============================================================================
+// ExampleMemory.h — v6 SDK
+// ============================================================================
+// Demonstrates the v6 MemoryService: base address, module size, pattern
+// scanning, raw memory read, and the new RAII string/wstring read paths.
+// ============================================================================
+
+#include "sdk/PluginSDK.h"
+#include <imgui.h>
+#include <vector>
+#include <cstdio>
 
 namespace Examples {
 
-// Demonstrates advanced memory reading capabilities
-inline void DrawMemoryPanel(PluginContext* ctx) {
-    if (!ctx->GetBaseAddress) {
-        ImGui::TextDisabled("Memory reading not available");
-        return;
-    }
+inline void DrawMemoryPanel(const PluginSDK::Context* ctx) {
+    if (!ctx) return;
 
-    PluginSDK::MemoryReader mem(ctx);
-    uintptr_t base = mem.GetBaseAddress();
-    uintptr_t modSize = mem.GetModuleSize();
+    uintptr_t base = ctx->Memory.GetBaseAddress();
+    uintptr_t modSize = ctx->Memory.GetModuleSize();
 
-    // --- Basic Info ---
-    ImGui::Text("Base Address: 0x%llX", base);
-    ImGui::Text("Module Size: 0x%llX (%llu KB)", modSize, modSize / 1024);
-    ImGui::Text("PID: %u", ctx->GetProcessId());
+    ImGui::Text("Base Address: 0x%llX", static_cast<unsigned long long>(base));
+    ImGui::Text("Module Size: 0x%llX (%llu KB)",
+                static_cast<unsigned long long>(modSize),
+                static_cast<unsigned long long>(modSize / 1024));
+    ImGui::Text("PID: %u", ctx->Game.GetProcessId());
 
     // --- PE Header Verification ---
-    if (base != 0 && ctx->ReadProcessMemory) {
-        uint16_t dosSignature = mem.Read<uint16_t>(base);
+    if (base != 0) {
+        uint16_t dosSignature = 0;
+        ctx->Memory.Read(base, &dosSignature, sizeof(dosSignature));
         ImGui::Text("DOS Signature: 0x%04X (%s)", dosSignature,
-            dosSignature == 0x5A4D ? "MZ - Valid PE" : "Unknown");
+                    dosSignature == 0x5A4D ? "MZ - Valid PE" : "Unknown");
 
-        // Read PE header offset and machine type
-        uint32_t peOffset = mem.Read<uint32_t>(base + 0x3C);
+        uint32_t peOffset = 0;
+        ctx->Memory.Read(base + 0x3C, &peOffset, sizeof(peOffset));
         if (peOffset > 0 && peOffset < modSize) {
-            uint32_t peSignature = mem.Read<uint32_t>(base + peOffset);
+            uint32_t peSignature = 0;
+            ctx->Memory.Read(base + peOffset, &peSignature, sizeof(peSignature));
             ImGui::Text("PE Signature: 0x%08X (%s)", peSignature,
-                peSignature == 0x00004550 ? "PE\\0\\0 - Valid" : "Invalid");
+                        peSignature == 0x00004550 ? "PE\\0\\0 - Valid" : "Invalid");
 
-            uint16_t machine = mem.Read<uint16_t>(base + peOffset + 4);
+            uint16_t machine = 0;
+            ctx->Memory.Read(base + peOffset + 4, &machine, sizeof(machine));
             ImGui::Text("Machine: 0x%04X (%s)", machine,
-                machine == 0x8664 ? "x64" : machine == 0x14C ? "x86" : "Other");
+                        machine == 0x8664 ? "x64"
+                        : machine == 0x14C ? "x86" : "Other");
         }
     }
 
-    // --- Pattern Addresses ---
     ImGui::Separator();
+
     if (ImGui::CollapsingHeader("Pattern Addresses", ImGuiTreeNodeFlags_DefaultOpen)) {
         const char* patterns[] = {
             "Game States", "File Root", "AreaChangeCounter",
@@ -52,13 +62,14 @@ inline void DrawMemoryPanel(PluginContext* ctx) {
             ImGui::TableHeadersRow();
 
             for (auto* name : patterns) {
-                uintptr_t addr = mem.GetPatternAddress(name);
+                uintptr_t addr = ctx->Memory.GetPatternAddress(name);
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn();
                 ImGui::Text("%s", name);
                 ImGui::TableNextColumn();
                 if (addr != 0) {
-                    char buf[20]; snprintf(buf, sizeof(buf), "0x%llX", addr);
+                    char buf[20]; snprintf(buf, sizeof(buf), "0x%llX",
+                                           static_cast<unsigned long long>(addr));
                     ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.6f, 1.0f), "%s", buf);
                     if (ImGui::IsItemHovered() && ImGui::IsItemClicked())
                         ImGui::SetClipboardText(buf);
@@ -70,7 +81,6 @@ inline void DrawMemoryPanel(PluginContext* ctx) {
         }
     }
 
-    // --- Memory Hex Viewer ---
     if (ImGui::CollapsingHeader("Memory Hex Viewer")) {
         static char addrInput[20] = "";
         static uintptr_t viewAddr = 0;
@@ -83,49 +93,49 @@ inline void DrawMemoryPanel(PluginContext* ctx) {
         ImGui::SameLine();
         if (ImGui::Button("Base")) {
             viewAddr = base;
-            snprintf(addrInput, sizeof(addrInput), "%llX", base);
+            snprintf(addrInput, sizeof(addrInput), "%llX",
+                     static_cast<unsigned long long>(base));
         }
         ImGui::SliderInt("Bytes", &viewSize, 16, 512);
 
-        if (viewAddr != 0 && ctx->ReadProcessMemory) {
+        if (viewAddr != 0) {
             std::vector<uint8_t> data(viewSize);
-            if (ctx->ReadProcessMemory(viewAddr, data.data(), viewSize)) {
-                // Hex dump
+            if (ctx->Memory.Read(viewAddr, data.data(), viewSize)) {
                 for (int i = 0; i < viewSize; i += 16) {
-                    ImGui::Text("%llX: ", viewAddr + i);
+                    ImGui::Text("%llX: ", static_cast<unsigned long long>(viewAddr + i));
                     ImGui::SameLine();
                     for (int j = 0; j < 16 && (i + j) < viewSize; j++) {
                         if (j == 8) { ImGui::SameLine(); ImGui::TextDisabled("|"); }
                         ImGui::SameLine();
                         ImGui::Text("%02X", data[i + j]);
                     }
-                    // ASCII
                     ImGui::SameLine(0, 20);
                     char ascii[17] = {};
                     for (int j = 0; j < 16 && (i + j) < viewSize; j++) {
                         uint8_t c = data[i + j];
-                        ascii[j] = (c >= 32 && c < 127) ? (char)c : '.';
+                        ascii[j] = (c >= 32 && c < 127) ? static_cast<char>(c) : '.';
                     }
                     ImGui::TextDisabled("%s", ascii);
                 }
             } else {
-                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Read failed at 0x%llX", viewAddr);
+                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1),
+                                   "Read failed at 0x%llX",
+                                   static_cast<unsigned long long>(viewAddr));
             }
         }
     }
 
-    // --- Read Template Demo ---
-    if (ImGui::CollapsingHeader("Read<T> Demo")) {
+    if (ImGui::CollapsingHeader("MemoryService API")) {
         ImGui::TextWrapped(
-            "The PluginSDK::MemoryReader helper provides typed reading:\n"
-            "  mem.Read<T>(addr)          - Read a single struct\n"
-            "  mem.ReadArray<T>(addr, n)  - Read array of N structs\n"
-            "  mem.ReadStdVector<T>(addr) - Read StdVector container\n"
-            "  mem.ReadStdList<T>(addr)   - Read StdList container\n"
-            "  mem.ReadStdBucket<T>(addr) - Read StdBucket container\n"
-            "  mem.ReadStdMap<K,V>(addr)  - Read StdMap container\n"
-            "  mem.ReadStdWString(addr)   - Read StdWString container"
-        );
+            "The v6 MemoryService exposes the following helpers:\n"
+            "  ctx->Memory.Read(addr, buf, size)\n"
+            "  ctx->Memory.ReadString(addr)           - null-terminated ASCII\n"
+            "  ctx->Memory.ReadWString(addr)          - null-terminated wide\n"
+            "  ctx->Memory.ReadStdWString(addr)       - StdWString container\n"
+            "  ctx->Memory.ReadStdVector(addr, sz, n) - StdVector<T> raw bytes\n"
+            "  ctx->Memory.GetBaseAddress()\n"
+            "  ctx->Memory.GetModuleSize()\n"
+            "  ctx->Memory.GetPatternAddress(name)\n");
     }
 }
 
