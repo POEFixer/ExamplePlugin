@@ -67,44 +67,69 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
         if (shown == 0) ImGui::TextDisabled("No entities with Render component nearby");
     }
 
-    if (ImGui::CollapsingHeader("Item Mods (Nearby Items)")) {
-        int shown = 0;
-        for (const auto& entity : snapshot.Entities) {
-            // Accept any entity with a Mods component (world items, chests
-            // with mods, expedition logbooks, etc.). The earlier
-            // EntitySubtype-only filter was too narrow — dropped items on
-            // the ground sometimes arrive with EntitySubtype unset by the
-            // host classifier.
-            if (!entity.Components.HasMods()) continue;
-            if (entity.EntityType != PluginSDK::EntityType::Item &&
-                entity.EntityType != PluginSDK::EntityType::Chest)
-                continue;
+    if (ImGui::CollapsingHeader("Item Mods (Diagnostic)")) {
+        // Diagnostic version: counts by EntityType, then lists EVERY entity
+        // with a Mods component regardless of type. The earlier strict
+        // EntityType==Item || Chest filter hid the truth — if the host
+        // classifies a dropped item differently (or items aren't reaching
+        // snapshot.Entities at all), the demo silently shows nothing.
 
-            auto mods = ctx->Components.ReadMods(entity.Components.Mods);
-            if (!mods.Valid) continue;
-
-            const char* typeName = (entity.EntityType == PluginSDK::EntityType::Item)
-                                       ? "Item" : "Chest";
-            // Components.ReadMods returns only the summary (flags + counts).
-            // For the actual mod lists, fetch via Inventory.ReadItemMods on
-            // the entity address — that returns ItemMods with Implicit /
-            // Explicit / Enchant / Hellscape / Crucible vectors.
-            auto itemMods = ctx->Inventory.ReadItemMods(entity.Address);
-            ImGui::Text("[%s id=%u] Rarity=%d iLvl=%d CraftedMods=%d "
-                        "implicits=%zu explicits=%zu",
-                typeName, entity.Id,
-                mods.Rarity, mods.ItemLevel, mods.CraftedModCount,
-                itemMods.Valid ? itemMods.ImplicitMods.size() : 0u,
-                itemMods.Valid ? itemMods.ExplicitMods.size() : 0u);
-
-            if (++shown >= 15) {
-                ImGui::TextDisabled("... (more items omitted)");
-                break;
+        struct TypeCounts { int total = 0; int withMods = 0; };
+        std::map<int, TypeCounts> byType;
+        int totalWithMods = 0;
+        for (const auto& e : snapshot.Entities) {
+            int t = static_cast<int>(e.EntityType);
+            byType[t].total++;
+            if (e.Components.HasMods()) {
+                byType[t].withMods++;
+                totalWithMods++;
             }
         }
-        if (shown == 0) {
-            ImGui::TextDisabled("No nearby items or chests with Mods. Try dropping "
-                                 "an item on the ground, or walk near a chest.");
+
+        ImGui::Text("Total entities in snapshot: %zu", snapshot.Entities.size());
+        ImGui::Text("Entities with HasMods():    %d", totalWithMods);
+        ImGui::Separator();
+        ImGui::Text("Per-EntityType breakdown:");
+        const char* typeNames[] = {
+            "Unidentified", "Chest", "NPC", "Player", "Shrine", "Monster",
+            "DeliriumBomb", "DeliriumSpawner", "OtherImportant", "Item",
+            "Renderable", "AreaTransition", "ExpeditionMarker", "ExpeditionRemnant"
+        };
+        for (const auto& [t, counts] : byType) {
+            const char* name = (t >= 0 && t < (int)(sizeof(typeNames)/sizeof(typeNames[0])))
+                                   ? typeNames[t] : "?";
+            ImGui::BulletText("Type %d (%s): %d total, %d with Mods",
+                              t, name, counts.total, counts.withMods);
+        }
+        ImGui::Separator();
+
+        if (totalWithMods == 0) {
+            ImGui::TextDisabled("No entities with Mods component in snapshot. "
+                                 "Try walking near items/chests on the ground.");
+        } else {
+            ImGui::Text("Listing entities with HasMods (max 20):");
+            int shown = 0;
+            for (const auto& entity : snapshot.Entities) {
+                if (!entity.Components.HasMods()) continue;
+                auto mods = ctx->Components.ReadMods(entity.Components.Mods);
+                int t = static_cast<int>(entity.EntityType);
+                const char* tname = (t >= 0 && t < (int)(sizeof(typeNames)/sizeof(typeNames[0])))
+                                       ? typeNames[t] : "?";
+                auto itemMods = ctx->Inventory.ReadItemMods(entity.Address);
+                ImGui::Text("[%s/%d id=%u] modsValid=%d Rarity=%d iLvl=%d "
+                            "implicits=%zu explicits=%zu",
+                    tname, static_cast<int>(entity.EntitySubtype), entity.Id,
+                    mods.Valid ? 1 : 0,
+                    mods.Valid ? mods.Rarity : 0,
+                    mods.Valid ? mods.ItemLevel : 0,
+                    itemMods.Valid ? itemMods.ImplicitMods.size() : 0u,
+                    itemMods.Valid ? itemMods.ExplicitMods.size() : 0u);
+                if (++shown >= 20) {
+                    ImGui::TextDisabled("... %d more entities with Mods",
+                                         totalWithMods - shown);
+                    break;
+                }
+            }
         }
     }
 
