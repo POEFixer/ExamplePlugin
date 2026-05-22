@@ -67,69 +67,44 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
         if (shown == 0) ImGui::TextDisabled("No entities with Render component nearby");
     }
 
-    if (ImGui::CollapsingHeader("Item Mods (Diagnostic)")) {
-        // Diagnostic version: counts by EntityType, then lists EVERY entity
-        // with a Mods component regardless of type. The earlier strict
-        // EntityType==Item || Chest filter hid the truth — if the host
-        // classifies a dropped item differently (or items aren't reaching
-        // snapshot.Entities at all), the demo silently shows nothing.
+    if (ImGui::CollapsingHeader("Items on Ground")) {
+        // Dropped items arrive as EntityType::Item entities at path
+        // Metadata/MiscellaneousObjects/WorldItem. They're container entities
+        // that don't carry Mods/Base/Stack directly — those live on an inner
+        // item entity referenced through the WorldItem wrapper. The SDK
+        // doesn't yet expose that traversal (TODO: add WorldItem reader),
+        // so for now we just count items and list their paths so plugin
+        // authors can see they're reaching the snapshot.
 
-        struct TypeCounts { int total = 0; int withMods = 0; };
-        std::map<int, TypeCounts> byType;
-        int totalWithMods = 0;
+        int itemCount = 0;
         for (const auto& e : snapshot.Entities) {
-            int t = static_cast<int>(e.EntityType);
-            byType[t].total++;
-            if (e.Components.HasMods()) {
-                byType[t].withMods++;
-                totalWithMods++;
-            }
+            if (e.EntityType == PluginSDK::EntityType::Item) itemCount++;
         }
 
-        ImGui::Text("Total entities in snapshot: %zu", snapshot.Entities.size());
-        ImGui::Text("Entities with HasMods():    %d", totalWithMods);
-        ImGui::Separator();
-        ImGui::Text("Per-EntityType breakdown:");
-        const char* typeNames[] = {
-            "Unidentified", "Chest", "NPC", "Player", "Shrine", "Monster",
-            "DeliriumBomb", "DeliriumSpawner", "OtherImportant", "Item",
-            "Renderable", "AreaTransition", "ExpeditionMarker", "ExpeditionRemnant"
-        };
-        for (const auto& [t, counts] : byType) {
-            const char* name = (t >= 0 && t < (int)(sizeof(typeNames)/sizeof(typeNames[0])))
-                                   ? typeNames[t] : "?";
-            ImGui::BulletText("Type %d (%s): %d total, %d with Mods",
-                              t, name, counts.total, counts.withMods);
-        }
-        ImGui::Separator();
-
-        if (totalWithMods == 0) {
-            ImGui::TextDisabled("No entities with Mods component in snapshot. "
-                                 "Try walking near items/chests on the ground.");
+        ImGui::Text("Items on ground: %d", itemCount);
+        if (itemCount == 0) {
+            ImGui::TextDisabled("Walk near a dropped item to see it here.");
         } else {
-            ImGui::Text("Listing entities with HasMods (max 20):");
+            ImGui::Separator();
             int shown = 0;
             for (const auto& entity : snapshot.Entities) {
-                if (!entity.Components.HasMods()) continue;
-                auto mods = ctx->Components.ReadMods(entity.Components.Mods);
-                int t = static_cast<int>(entity.EntityType);
-                const char* tname = (t >= 0 && t < (int)(sizeof(typeNames)/sizeof(typeNames[0])))
-                                       ? typeNames[t] : "?";
-                auto itemMods = ctx->Inventory.ReadItemMods(entity.Address);
-                ImGui::Text("[%s/%d id=%u] modsValid=%d Rarity=%d iLvl=%d "
-                            "implicits=%zu explicits=%zu",
-                    tname, static_cast<int>(entity.EntitySubtype), entity.Id,
-                    mods.Valid ? 1 : 0,
-                    mods.Valid ? mods.Rarity : 0,
-                    mods.Valid ? mods.ItemLevel : 0,
-                    itemMods.Valid ? itemMods.ImplicitMods.size() : 0u,
-                    itemMods.Valid ? itemMods.ExplicitMods.size() : 0u);
+                if (entity.EntityType != PluginSDK::EntityType::Item) continue;
+                std::string narrowPath;
+                narrowPath.reserve(entity.Path.size());
+                for (wchar_t c : entity.Path)
+                    narrowPath += (c < 128) ? static_cast<char>(c) : '?';
+                ImGui::Text("id=%u  pos=(%.1f, %.1f)  %s",
+                            entity.Id,
+                            entity.GridPositionX, entity.GridPositionY,
+                            narrowPath.c_str());
                 if (++shown >= 20) {
-                    ImGui::TextDisabled("... %d more entities with Mods",
-                                         totalWithMods - shown);
+                    ImGui::TextDisabled("... %d more items", itemCount - shown);
                     break;
                 }
             }
+            ImGui::Separator();
+            ImGui::TextDisabled("TODO: traverse WorldItem wrapper to read inner "
+                                 "item's Mods / Base / Stack components.");
         }
     }
 
