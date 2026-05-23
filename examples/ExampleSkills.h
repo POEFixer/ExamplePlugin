@@ -239,10 +239,12 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
                 ImGui::TableNextColumn(); ImGui::Text("%.0f", it != state.timings.end() ? it->second.last_measured_ms : 0.0f);
                 ImGui::TableNextColumn(); ImGui::Text("%.0f", it != state.timings.end() ? it->second.ema_ms : 0.0f);
                 ImGui::TableNextColumn();
-                if (state.manual_calibrating_skill == s.Name) {
+                if (!s.Name.empty() && state.manual_calibrating_skill == s.Name) {
                     if (ImGui::SmallButton("Cancel")) state.manual_calibrating_skill.clear();
                 } else {
-                    if (ImGui::SmallButton("Calibrate")) state.manual_calibrating_skill = s.Name;
+                    if (ImGui::SmallButton("Calibrate")) {
+                        if (!s.Name.empty()) state.manual_calibrating_skill = s.Name;
+                    }
                 }
                 ImGui::PopID();
             }
