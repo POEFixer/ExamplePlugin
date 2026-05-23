@@ -150,7 +150,7 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
                 //   Fallback to truncated metadata path if names are empty
                 //   (e.g. very early mid-spawn before names are streamed in).
                 if (!uniqueName.empty()) {
-                    ImGui::Text("%s (%s)", uniqueName.c_str(), baseTypeName.c_str());
+                    ImGui::Text("%s %s", uniqueName.c_str(), baseTypeName.c_str());
                 } else if (!baseTypeName.empty()) {
                     ImGui::TextUnformatted(baseTypeName.c_str());
                 } else {
