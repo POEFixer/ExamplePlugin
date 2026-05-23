@@ -7,8 +7,8 @@
 // went through ComponentCache.HasLife() / ReadLifeComponent() etc.
 // ============================================================================
 
-#include "sdk/PluginSDK.h"
-#include <imgui.h>
+#include "../../../POEFixer/plugin_sdk/PluginSDK.h"
+#include "../../../POEFixer/imgui/imgui.h"
 #include "SdkStatus.h"
 #include <algorithm>
 #include <string>
@@ -68,43 +68,91 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
     }
 
     if (ImGui::CollapsingHeader("Items on Ground")) {
-        // Dropped items arrive as EntityType::Item entities at path
-        // Metadata/MiscellaneousObjects/WorldItem. They're container entities
-        // that don't carry Mods/Base/Stack directly — those live on an inner
-        // item entity referenced through the WorldItem wrapper. The SDK
-        // doesn't yet expose that traversal (TODO: add WorldItem reader),
-        // so for now we just count items and list their paths so plugin
-        // authors can see they're reaching the snapshot.
+        // Ground items are WorldItem container entities. The inner item
+        // entity (with Mods/Base/Stack/Sockets components) is reached via
+        // ctx->Entities.GetWorldItemInner(containerAddr).
 
-        int itemCount = 0;
+        int total = 0;
+        int withMods = 0;
         for (const auto& e : snapshot.Entities) {
-            if (e.EntityType == PluginSDK::EntityType::Item) itemCount++;
+            if (e.EntityType != PluginSDK::EntityType::Item) continue;
+            ++total;
+            auto inner = ctx->Entities.GetWorldItemInner(e.Address);
+            if (inner && inner->Components.HasMods()) ++withMods;
         }
-
-        ImGui::Text("Items on ground: %d", itemCount);
-        if (itemCount == 0) {
+        ImGui::Text("WorldItems: %d total | %d with Mods", total, withMods);
+        if (total == 0) {
             ImGui::TextDisabled("Walk near a dropped item to see it here.");
         } else {
             ImGui::Separator();
             int shown = 0;
             for (const auto& entity : snapshot.Entities) {
                 if (entity.EntityType != PluginSDK::EntityType::Item) continue;
+
+                auto inner = ctx->Entities.GetWorldItemInner(entity.Address);
+                if (!inner) {
+                    ImGui::TextDisabled("id=%u  (inner not yet resolved)", entity.Id);
+                    if (++shown >= 20) break;
+                    continue;
+                }
+
+                // Truncate inner path to last 2 segments for readability.
                 std::string narrowPath;
-                narrowPath.reserve(entity.Path.size());
-                for (wchar_t c : entity.Path)
+                narrowPath.reserve(inner->Path.size());
+                for (wchar_t c : inner->Path)
                     narrowPath += (c < 128) ? static_cast<char>(c) : '?';
-                ImGui::Text("id=%u  pos=(%.1f, %.1f)  %s",
-                            entity.Id,
-                            entity.GridPositionX, entity.GridPositionY,
-                            narrowPath.c_str());
+                size_t lastSlash = narrowPath.rfind('/');
+                size_t prevSlash = (lastSlash != std::string::npos && lastSlash > 0)
+                                       ? narrowPath.rfind('/', lastSlash - 1)
+                                       : std::string::npos;
+                std::string shortPath = (prevSlash != std::string::npos)
+                                            ? narrowPath.substr(prevSlash + 1)
+                                            : narrowPath;
+
+                // Rarity colour: 0=Normal (white), 1=Magic (blue),
+                // 2=Rare (yellow), 3=Unique (orange).
+                int rarity = 0;
+                int itemLevel = 0;
+                bool isIdentified = false;
+                bool isCorrupted = false;
+                int implicitCount = 0;
+                int explicitCount = 0;
+                if (inner->Components.HasMods()) {
+                    auto mods = ctx->Components.ReadMods(inner->Components.Mods);
+                    if (mods.Valid) {
+                        rarity        = mods.Rarity;
+                        itemLevel     = mods.ItemLevel;
+                        isIdentified  = mods.IsIdentified;
+                        isCorrupted   = mods.IsCorrupted;
+                    }
+                    // InventoryService::ReadItemMods returns a default-constructed
+                    // ItemMods on failure; empty vectors mean no mods.
+                    PluginSDK::ItemMods modList =
+                        ctx->Inventory.ReadItemMods(entity.Address);
+                    implicitCount = static_cast<int>(modList.ImplicitMods.size());
+                    explicitCount = static_cast<int>(modList.ExplicitMods.size());
+                }
+
+                ImVec4 colour =
+                    rarity == 1 ? ImVec4(0.55f, 0.65f, 1.00f, 1.0f)  // magic
+                  : rarity == 2 ? ImVec4(1.00f, 0.95f, 0.45f, 1.0f)  // rare
+                  : rarity == 3 ? ImVec4(1.00f, 0.60f, 0.20f, 1.0f)  // unique
+                  :               ImVec4(0.95f, 0.95f, 0.95f, 1.0f); // normal
+                ImGui::PushStyleColor(ImGuiCol_Text, colour);
+                ImGui::Text(
+                    "id=%u  iLvl=%d  rarity=%d  ident=%s  corr=%s  +%d/%dM  %s",
+                    entity.Id, itemLevel, rarity,
+                    isIdentified ? "y" : "n",
+                    isCorrupted  ? "y" : "n",
+                    implicitCount, explicitCount,
+                    shortPath.c_str());
+                ImGui::PopStyleColor();
+
                 if (++shown >= 20) {
-                    ImGui::TextDisabled("... %d more items", itemCount - shown);
+                    ImGui::TextDisabled("... %d more items", total - shown);
                     break;
                 }
             }
-            ImGui::Separator();
-            ImGui::TextDisabled("TODO: traverse WorldItem wrapper to read inner "
-                                 "item's Mods / Base / Stack components.");
         }
     }
 
