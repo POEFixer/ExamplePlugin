@@ -21,6 +21,7 @@
 #include "examples/ExampleBuffs.h"
 #include "examples/ExampleEntities.h"
 #include "examples/ExampleInventory.h"
+#include "examples/ExampleFlasks.h"
 #include "examples/ExampleMemory.h"
 #include "examples/ExampleUiExplorer.h"
 #include "examples/ComponentReader.h"
@@ -64,6 +65,7 @@ public:
         ImGui::Checkbox("Player Buffs",      &m_ShowBuffs);
         ImGui::Checkbox("Nearby Entities",   &m_ShowEntities);
         ImGui::Checkbox("Inventories",       &m_ShowInventory);
+        ImGui::Checkbox("Flasks & Charms",   &m_ShowFlasks);
         ImGui::Checkbox("Memory Info",       &m_ShowMemoryInfo);
         ImGui::Checkbox("Game UI Explorer",  &m_ShowUiExplorer);
         ImGui::Checkbox("Component Reader",  &m_ShowComponentReader);
@@ -137,6 +139,11 @@ public:
                 ImGui::EndTabItem();
             }
 
+            if (m_ShowFlasks && ImGui::BeginTabItem("Flasks & Charms")) {
+                Examples::DrawFlasksPanel(ctx());
+                ImGui::EndTabItem();
+            }
+
             if (m_ShowMemoryInfo && ImGui::BeginTabItem("Memory")) {
                 Examples::DrawMemoryPanel(ctx());
                 ImGui::EndTabItem();
@@ -191,6 +198,7 @@ public:
         file << "ShowEntities=" << (m_ShowEntities ? 1 : 0) << "\n";
         file << "ShowBuffs=" << (m_ShowBuffs ? 1 : 0) << "\n";
         file << "ShowInventory=" << (m_ShowInventory ? 1 : 0) << "\n";
+        file << "ShowFlasks=" << (m_ShowFlasks ? 1 : 0) << "\n";
         file << "ShowMemoryInfo=" << (m_ShowMemoryInfo ? 1 : 0) << "\n";
         file << "ShowUiExplorer=" << (m_ShowUiExplorer ? 1 : 0) << "\n";
         file << "ShowComponentReader=" << (m_ShowComponentReader ? 1 : 0) << "\n";
@@ -289,6 +297,7 @@ private:
             else if (key == "ShowEntities")        m_ShowEntities = (val == "1");
             else if (key == "ShowBuffs")           m_ShowBuffs = (val == "1");
             else if (key == "ShowInventory")       m_ShowInventory = (val == "1");
+            else if (key == "ShowFlasks")          m_ShowFlasks = (val == "1");
             else if (key == "ShowMemoryInfo")      m_ShowMemoryInfo = (val == "1");
             else if (key == "ShowUiExplorer")      m_ShowUiExplorer = (val == "1");
             else if (key == "ShowComponentReader") m_ShowComponentReader = (val == "1");
@@ -307,6 +316,7 @@ private:
     bool m_ShowEntities = true;
     bool m_ShowBuffs = true;
     bool m_ShowInventory = false;
+    bool m_ShowFlasks = true;
     bool m_ShowMemoryInfo = false;
     bool m_ShowUiExplorer = false;
     bool m_ShowComponentReader = false;

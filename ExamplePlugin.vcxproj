@@ -93,6 +93,7 @@
     <ClInclude Include="examples\ExampleBuffs.h" />
     <ClInclude Include="examples\ExampleEntities.h" />
     <ClInclude Include="examples\ExampleEvents.h" />
+    <ClInclude Include="examples\ExampleFlasks.h" />
     <ClInclude Include="examples\ExampleInventory.h" />
     <ClInclude Include="examples\ExampleLog.h" />
     <ClInclude Include="examples\ExampleMemory.h" />
