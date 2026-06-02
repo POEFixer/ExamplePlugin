@@ -27,6 +27,7 @@
 #include "examples/ComponentReader.h"
 #include "examples/SdkStatus.h"
 #include "examples/ExampleRender.h"
+#include "examples/ExampleSkills.h"
 #include "examples/ExampleTerrain.h"
 #include "examples/ExampleEvents.h"
 #include "examples/ExampleLog.h"
@@ -35,6 +36,7 @@
 #include <filesystem>
 #include <string>
 #include <chrono>
+#include <cfloat>
 
 class ExamplePlugin : public PluginSDK::Plugin {
 public:
@@ -73,6 +75,7 @@ public:
         ImGui::Checkbox("Terrain Demo",      &m_ShowTerrain);
         ImGui::Checkbox("Events Demo",       &m_ShowEvents);
         ImGui::Checkbox("Log Demo",          &m_ShowLog);
+        ImGui::Checkbox("Skills & Timing",   &m_ShowSkills);
         ImGui::Separator();
         ImGui::Checkbox("Enable Overlay Mode", &m_WantsOverlay);
         ImGui::SliderFloat("Window Opacity", &m_WindowAlpha, 0.3f, 1.0f, "%.1f");
@@ -85,7 +88,7 @@ public:
 
         PluginSDK::Snapshot snapshot = ctx()->Game.GetSnapshot();
 
-        ImGui::SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(900, 1200));
+        ImGui::SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(FLT_MAX, FLT_MAX));
         ImGui::SetNextWindowBgAlpha(m_WindowAlpha);
 
         if (!ImGui::Begin("Example Plugin v6##ExamplePlugin", &m_ShowWindow)) {
@@ -179,6 +182,11 @@ public:
                 ImGui::EndTabItem();
             }
 
+            if (m_ShowSkills && ImGui::BeginTabItem("Skills & Timing")) {
+                Examples::DrawSkillsPanel(ctx(), snapshot, m_skillsState);
+                ImGui::EndTabItem();
+            }
+
             ImGui::EndTabBar();
         }
 
@@ -206,6 +214,7 @@ public:
         file << "ShowTerrain=" << (m_ShowTerrain ? 1 : 0) << "\n";
         file << "ShowEvents=" << (m_ShowEvents ? 1 : 0) << "\n";
         file << "ShowLog=" << (m_ShowLog ? 1 : 0) << "\n";
+        file << "ShowSkills=" << (m_ShowSkills ? 1 : 0) << "\n";
         file << "WantsOverlay=" << (m_WantsOverlay ? 1 : 0) << "\n";
         file << "WindowAlpha=" << m_WindowAlpha << "\n";
     }
@@ -305,6 +314,7 @@ private:
             else if (key == "ShowTerrain")         m_ShowTerrain = (val == "1");
             else if (key == "ShowEvents")          m_ShowEvents = (val == "1");
             else if (key == "ShowLog")             m_ShowLog = (val == "1");
+            else if (key == "ShowSkills")          m_ShowSkills = (val == "1");
             else if (key == "WantsOverlay")        m_WantsOverlay = (val == "1");
             else if (key == "WindowAlpha") {
                 try { m_WindowAlpha = std::stof(val); } catch (...) {}
@@ -324,6 +334,8 @@ private:
     bool m_ShowTerrain = true;
     bool m_ShowEvents = true;
     bool m_ShowLog = true;
+    bool m_ShowSkills = true;
+    Examples::SkillsTabState m_skillsState;
     bool m_WantsOverlay = false;
     float m_WindowAlpha = 0.9f;
     std::chrono::steady_clock::time_point m_LastInventoryScan;
