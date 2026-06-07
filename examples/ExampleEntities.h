@@ -460,6 +460,23 @@ inline void DrawEntitiesPanel(const PluginSDK::Context* ctx,
                     DrawBuffsComp(ctx->Components.EnumerateBuffs(c.Buffs), e.Id);
                     ImGui::TreePop();
                 }
+                // Monster mods (ObjectMagicProperties) — present on monster
+                // entities; readable at spawn, before any related buff. Match on
+                // MonsterMod::Id (most stable), Metadata, or Hash16/Hash32.
+                if (c.HasOMP() && ImGui::TreeNode("Monster Mods")) {
+                    auto mmods = ctx->Components.EnumerateMonsterMods(c.OMP);
+                    ImGui::Text("EnumerateMonsterMods: %zu", mmods.size());
+                    for (const auto& m : mmods) {
+                        ImGui::BulletText("%s | %s | 0x%04X / 0x%08X",
+                            m.Id.c_str(),
+                            m.Name.empty() ? "-" : m.Name.c_str(),
+                            static_cast<unsigned>(m.Hash16),
+                            static_cast<unsigned>(m.Hash32));
+                        if (!m.Metadata.empty() && ImGui::IsItemHovered())
+                            ImGui::SetTooltip("%s", m.Metadata.c_str());
+                    }
+                    ImGui::TreePop();
+                }
                 ImGui::TreePop();
             }
 

@@ -292,6 +292,11 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
         // Item mods enumeration requires an item entity; skipped here unless a
         // nearby item has Mods. The Item Mods (Nearby Items) header above covers it.
         ImGui::TextDisabled("EnumerateItemMods: see 'Item Mods (Nearby Items)' header");
+
+        // Monster mods live on monster entities (ObjectMagicProperties / OMP),
+        // not the player. See the per-entity "Monster Mods" node in the Entities
+        // tab for a live ctx->Components.EnumerateMonsterMods(OMP) demo.
+        ImGui::TextDisabled("EnumerateMonsterMods: see Entities tab -> 'Monster Mods'");
     }
 
     if (ImGui::CollapsingHeader("Convenience Helpers")) {
