@@ -3,8 +3,11 @@
 // ExampleBuffs.h — v6 SDK
 // ============================================================================
 // Demonstrates reading the player's Buffs component and rendering a list with
-// progress bars and filtering. Uses ctx->Components.EnumerateBuffs() on the
-// Buffs component address found on the player's component cache.
+// progress bars and filtering. Uses ctx->Components.EnumerateAggregatedBuffs()
+// so multi-instance charge stacks (e.g. Chayula breach charges, stored as N
+// separate StatusEffect instances) show their summed count in the Charges
+// column — matching the in-game charge-stack icon. Swap in EnumerateBuffs()
+// for the raw per-instance list instead.
 // ============================================================================
 
 #include "sdk/PluginSDK.h"
@@ -22,7 +25,7 @@ inline void DrawBuffsPanel(const PluginSDK::Context* ctx,
     }
 
     std::vector<PluginSDK::Buff> buffs =
-        ctx->Components.EnumerateBuffs(snapshot.Player.Components.Buffs);
+        ctx->Components.EnumerateAggregatedBuffs(snapshot.Player.Components.Buffs);
 
     ImGui::Text("Active Buffs: %d", static_cast<int>(buffs.size()));
 
