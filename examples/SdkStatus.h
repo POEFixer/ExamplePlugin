@@ -96,6 +96,19 @@ inline std::vector<ServiceStatus> ComputeCoverage(
     // Events
     add("Events", StatusLevel::Ok);  // Counter values shown in Events tab
 
+    // Prices (host-loaded poe2scout market data; shared by all plugins)
+    if (!ctx) {
+        add("Prices", StatusLevel::Fail, "ABI missing");
+    } else {
+        PluginSDK::PriceStatus ps = ctx->Prices.GetStatus();
+        if (ps.loaded)
+            add("Prices", StatusLevel::Ok, std::to_string(ps.totalItems) + " items");
+        else if (ps.catsFailed > 0 && ps.catsPending == 0)
+            add("Prices", StatusLevel::Fail, "all categories failed");
+        else
+            add("Prices", StatusLevel::Warn, "loading...");
+    }
+
     return out;
 }
 

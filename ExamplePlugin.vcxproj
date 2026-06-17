@@ -99,6 +99,7 @@
     <ClInclude Include="examples\ExampleInventory.h" />
     <ClInclude Include="examples\ExampleLog.h" />
     <ClInclude Include="examples\ExampleMemory.h" />
+    <ClInclude Include="examples\ExamplePrices.h" />
     <ClInclude Include="examples\ExampleRender.h" />
     <ClInclude Include="examples\ExampleTerrain.h" />
     <ClInclude Include="examples\ExampleUiExplorer.h" />
