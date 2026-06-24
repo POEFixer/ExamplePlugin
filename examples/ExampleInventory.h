@@ -162,10 +162,22 @@ inline void DrawInventoryPanel(
         };
         const char* rarityNames[] = { "Normal", "Magic", "Rare", "Unique" };
 
-        auto renderMods = [](const char* label, const std::vector<PluginSDK::Mod>& mods) {
+        auto renderMods = [ctx](const char* label, const std::vector<PluginSDK::Mod>& mods) {
             if (mods.empty()) return;
             if (ImGui::TreeNode(label)) {
                 for (const auto& mod : mods) {
+                    // Affix-type tag + display name (additive — raw line follows).
+                    const char* genTag = (mod.GenerationType == 1) ? "[PREFIX] "
+                                       : (mod.GenerationType == 2) ? "[SUFFIX] "
+                                       : (mod.GenerationType == 3) ? "[IMPLICIT] " : "";
+                    if (genTag[0]) {
+                        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s", genTag);
+                        ImGui::SameLine(0, 0);
+                    }
+                    if (!mod.AffixName.empty()) {
+                        ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.9f, 1.0f), "%s ", mod.AffixName.c_str());
+                        ImGui::SameLine(0, 0);
+                    }
                     bool hasV0 = !std::isnan(mod.Value0);
                     bool hasV1 = !std::isnan(mod.Value1);
                     if (hasV0 && hasV1)
@@ -176,6 +188,12 @@ inline void DrawInventoryPanel(
                         ImGui::Text("%s", mod.Name.c_str());
                     if (ImGui::IsItemHovered() && ImGui::IsItemClicked())
                         ImGui::SetClipboardText(mod.Name.c_str());
+                    // In-game-style line via the host .csd formatter.
+                    float v0 = std::isnan(mod.Value0) ? 0.0f : mod.Value0;
+                    float v1 = std::isnan(mod.Value1) ? 0.0f : mod.Value1;
+                    std::string ig = ctx->Inventory.FormatStat(mod.StatKey, v0, v1);
+                    if (!ig.empty())
+                        ImGui::TextColored(ImVec4(0.55f, 0.65f, 1.0f, 1.0f), "    %s", ig.c_str());
                 }
                 ImGui::TreePop();
             }
@@ -243,6 +261,43 @@ inline void DrawInventoryPanel(
                         ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "(no mods)");
                 } else {
                     ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "(mods unavailable)");
+                }
+
+                // Item base defensive stats. Energy Shield is the in-game
+                // (computed) value: round((baseES + flat131) * (1 + %132/100)).
+                PluginSDK::ItemBaseStats bs = ctx->Inventory.ReadItemBaseStats(item.Address);
+                auto agg = ctx->Inventory.ReadItemAggregatedStats(item.Address);
+                int flatES = 0, pctES = 0;
+                for (const auto& kv : agg) {
+                    if (kv.first == 131) flatES = kv.second;
+                    else if (kv.first == 132) pctES = kv.second;
+                }
+                int es = (bs.EnergyShield > 0)
+                    ? static_cast<int>(std::lround((bs.EnergyShield + flatES) * (1.0 + pctES / 100.0)))
+                    : 0;
+                if (bs.Valid && (es || bs.Ward || bs.Armour || bs.Evasion)
+                    && ImGui::TreeNode("Base Stats")) {
+                    if (es)         ImGui::Text("Energy Shield: %d", es);
+                    if (bs.Ward)    ImGui::Text("Runic Ward: %d", bs.Ward);
+                    if (bs.Armour)  ImGui::Text("Armour: %d", bs.Armour);
+                    if (bs.Evasion) ImGui::Text("Evasion: %d", bs.Evasion);
+                    ImGui::TreePop();
+                }
+
+                // Aggregated stats — only the known waystone/map header props.
+                bool anyKnown = false;
+                for (const auto& kv : agg)
+                    if (kv.first >= 8205 && kv.first <= 8209) { anyKnown = true; break; }
+                if (anyKnown && ImGui::TreeNode("Aggregated Stats")) {
+                    for (const auto& kv : agg) {
+                        const char* lbl = (kv.first == 8205) ? "Item Rarity"
+                                        : (kv.first == 8206) ? "Pack Size"
+                                        : (kv.first == 8207) ? "Monster Rarity"
+                                        : (kv.first == 8208) ? "Monster Effectiveness"
+                                        : (kv.first == 8209) ? "Waystone Drop Chance" : nullptr;
+                        if (lbl) ImGui::Text("%s: %+d%%", lbl, kv.second);
+                    }
+                    ImGui::TreePop();
                 }
 
                 ImGui::TreePop();
