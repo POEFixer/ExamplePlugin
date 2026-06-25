@@ -117,38 +117,53 @@ inline void DrawInventoryPanel(
 
     // --- Visual slot grid -------------------------------------------------
     if (inv.TotalBoxesX > 0 && inv.TotalBoxesY > 0 && ImGui::TreeNode("Inventory Slots")) {
-        std::vector<uint8_t> occupied(
-            static_cast<size_t>(inv.TotalBoxesX) * inv.TotalBoxesY, 0);
-        for (const auto& it : inv.Items) {
-            for (int yy = 0; yy < it.Height; ++yy)
-                for (int xx = 0; xx < it.Width; ++xx) {
-                    int gx = it.SlotX + xx;
-                    int gy = it.SlotY + yy;
-                    if (gx >= 0 && gx < inv.TotalBoxesX
-                        && gy >= 0 && gy < inv.TotalBoxesY) {
-                        occupied[static_cast<size_t>(gy) * inv.TotalBoxesX + gx] = 1;
+        // Defensive bound: TotalBoxesX/Y originate from a live game-memory read and
+        // can momentarily be garbage during an area transition (the inventory
+        // object is mid-free/relocate). NEVER size an allocation off raw memory
+        // dimensions without bounding them first — an unbounded
+        // std::vector(TotalBoxesX*TotalBoxesY) on garbage dims throws std::bad_alloc
+        // mid-ImGui-render, which the host's SEH guard catches but cannot use to
+        // restore the shared ImGui context → the host crashes a frame later. Real
+        // grids never exceed 64 per side. (The host scan also clamps these now;
+        // this is belt-and-suspenders for plugins copying this pattern.)
+        if (inv.TotalBoxesX <= 64 && inv.TotalBoxesY <= 64) {
+            std::vector<uint8_t> occupied(
+                static_cast<size_t>(inv.TotalBoxesX) * inv.TotalBoxesY, 0);
+            for (const auto& it : inv.Items) {
+                for (int yy = 0; yy < it.Height; ++yy)
+                    for (int xx = 0; xx < it.Width; ++xx) {
+                        int gx = it.SlotX + xx;
+                        int gy = it.SlotY + yy;
+                        if (gx >= 0 && gx < inv.TotalBoxesX
+                            && gy >= 0 && gy < inv.TotalBoxesY) {
+                            occupied[static_cast<size_t>(gy) * inv.TotalBoxesX + gx] = 1;
+                        }
                     }
-                }
-        }
-
-        float cellSize = 18.0f;
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        ImVec2 origin = ImGui::GetCursorScreenPos();
-        for (int y = 0; y < inv.TotalBoxesY; y++) {
-            for (int x = 0; x < inv.TotalBoxesX; x++) {
-                int idx = y * inv.TotalBoxesX + x;
-                bool occ = (idx < static_cast<int>(occupied.size()))
-                    && occupied[static_cast<size_t>(idx)];
-                ImVec2 p0(origin.x + x * cellSize, origin.y + y * cellSize);
-                ImVec2 p1(p0.x + cellSize - 1, p0.y + cellSize - 1);
-                ImU32 col = occ
-                    ? IM_COL32(80, 200, 80, 255)
-                    : IM_COL32(60, 60, 60, 255);
-                drawList->AddRectFilled(p0, p1, col);
-                drawList->AddRect(p0, p1, IM_COL32(100, 100, 100, 255));
             }
+
+            float cellSize = 18.0f;
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            ImVec2 origin = ImGui::GetCursorScreenPos();
+            for (int y = 0; y < inv.TotalBoxesY; y++) {
+                for (int x = 0; x < inv.TotalBoxesX; x++) {
+                    int idx = y * inv.TotalBoxesX + x;
+                    bool occ = (idx < static_cast<int>(occupied.size()))
+                        && occupied[static_cast<size_t>(idx)];
+                    ImVec2 p0(origin.x + x * cellSize, origin.y + y * cellSize);
+                    ImVec2 p1(p0.x + cellSize - 1, p0.y + cellSize - 1);
+                    ImU32 col = occ
+                        ? IM_COL32(80, 200, 80, 255)
+                        : IM_COL32(60, 60, 60, 255);
+                    drawList->AddRectFilled(p0, p1, col);
+                    drawList->AddRect(p0, p1, IM_COL32(100, 100, 100, 255));
+                }
+            }
+            ImGui::Dummy(ImVec2(inv.TotalBoxesX * cellSize, inv.TotalBoxesY * cellSize));
+        } else {
+            ImGui::TextColored(ImVec4(1, 0.5f, 0.3f, 1),
+                "Invalid grid dimensions (%dx%d) — skipped",
+                inv.TotalBoxesX, inv.TotalBoxesY);
         }
-        ImGui::Dummy(ImVec2(inv.TotalBoxesX * cellSize, inv.TotalBoxesY * cellSize));
         ImGui::TreePop();
     }
 
