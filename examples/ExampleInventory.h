@@ -123,10 +123,14 @@ inline void DrawInventoryPanel(
         // dimensions without bounding them first — an unbounded
         // std::vector(TotalBoxesX*TotalBoxesY) on garbage dims throws std::bad_alloc
         // mid-ImGui-render, which the host's SEH guard catches but cannot use to
-        // restore the shared ImGui context → the host crashes a frame later. Real
-        // grids never exceed 64 per side. (The host scan also clamps these now;
-        // this is belt-and-suspenders for plugins copying this pattern.)
-        if (inv.TotalBoxesX <= 64 && inv.TotalBoxesY <= 64) {
+        // restore the shared ImGui context → the host crashes a frame later.
+        // Special stash tabs (currency/gems/sockets/essence) are genuinely wide —
+        // up to ~250 a side / ~1.3k slots — so bound generously (matching the host
+        // scan) rather than at 64: reject only the absurd mid-transition garbage
+        // reads (millions/billions a side) while still rendering real wide tabs.
+        const long long exTotalSlots =
+            static_cast<long long>(inv.TotalBoxesX) * inv.TotalBoxesY;
+        if (inv.TotalBoxesX <= 1024 && inv.TotalBoxesY <= 1024 && exTotalSlots <= 65536) {
             std::vector<uint8_t> occupied(
                 static_cast<size_t>(inv.TotalBoxesX) * inv.TotalBoxesY, 0);
             for (const auto& it : inv.Items) {
