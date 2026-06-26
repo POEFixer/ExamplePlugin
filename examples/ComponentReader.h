@@ -173,6 +173,44 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
         }
     }
 
+    if (ImGui::CollapsingHeader("Ground Effects")) {
+        // GroundEffect lives on VisibleServerGroundEffect entities, which all
+        // share the same metadata path — TypeId is what tells the variants apart
+        // (ShockedGround / IgnitedGround / CausticCloud / ChilledGround / ...).
+        // NOTE: ReadGroundEffect takes the ENTITY address, NOT a component
+        // address — the host resolves the "GroundEffect" component itself (it is
+        // not part of Entity::Components, so there is no Components.GroundEffect).
+        // Radius is in world units (0 = unset by that variant); to draw the area
+        // on the ground, project a ring with ctx->Render.WorldToScreen (see
+        // ExampleRender).
+        int shown = 0;
+        for (const auto& entity : snapshot.Entities) {
+            if (entity.Path.find(L"VisibleServerGroundEffect") == std::wstring::npos)
+                continue;
+
+            auto ge = ctx->Components.ReadGroundEffect(entity.Address);
+            if (!ge.Valid) continue;
+
+            ImGui::Text("Entity %u: %s  (radius %.0f)",
+                entity.Id, ge.TypeId.empty() ? "(unknown)" : ge.TypeId.c_str(),
+                ge.Radius);
+            if (!ge.BuffVisual1.empty() || !ge.AoFile.empty() || !ge.EndEffect.empty()) {
+                ImGui::TextDisabled("    visual=%s  ao=%s  end=%s",
+                    ge.BuffVisual1.empty() ? "-" : ge.BuffVisual1.c_str(),
+                    ge.AoFile.empty()      ? "-" : ge.AoFile.c_str(),
+                    ge.EndEffect.empty()   ? "-" : ge.EndEffect.c_str());
+            }
+
+            if (++shown >= 20) {
+                ImGui::TextDisabled("... more ground effects nearby");
+                break;
+            }
+        }
+        if (shown == 0)
+            ImGui::TextDisabled("No ground effects nearby "
+                                "(stand near caustic / ignited / shocked ground to see them)");
+    }
+
     if (ImGui::CollapsingHeader("UI Navigation Demo")) {
         uintptr_t gameUi = ctx->Ui.GetGameUiRoot();
         if (gameUi != 0) {
