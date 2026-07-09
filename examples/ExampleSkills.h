@@ -1,7 +1,7 @@
 // ============================================================================
 // ExampleSkills — Skill Bar Live View + Animation Timing Sampler + DAT Inspector
 // ============================================================================
-// Three blocks demonstrating the v6 SDK Active Skill surface:
+// Four blocks demonstrating the v6 SDK Active Skill surface:
 //   1. Live View      — full per-frame table of every active skill
 //   2. Timing Sampler — empirically measures animation duration by sampling
 //                       Actor.AnimationId transitions, invalidates on buff
@@ -10,6 +10,11 @@
 //   3. DAT Inspector  — hex-dumps the 0x100-byte ActiveSkillDetails struct
 //                       via Memory.Read so authors can reverse new fields
 //                       without touching the SDK.
+//   4. Stat Sets/DPS  — EnumerateSkillStats: the game's evaluated per-skill
+//                       stat containers ({stat_id, value} pairs, stat_id =
+//                       Stats.dat row + 1) + how to read the DPS family
+//                       (691 aps*100 / 692 dps*100 / 695 cps*100 — VIRTUAL
+//                       stats, present only where the game evaluated them).
 // ============================================================================
 #pragma once
 
@@ -44,6 +49,7 @@ struct SkillsTabState {
     uint64_t     buffs_fingerprint = 0;
     uint64_t     prev_buffs_fingerprint = 0;
     int          dat_inspect_skill_index = -1;              // for DAT Inspector
+    int          stat_sets_skill_index = -1;                // for Stat Sets / DPS block
 
     // Generic Idle→non-Idle→Idle cycle tracker (latches the most recent
     // non-Idle duration; shown next to "Current Anim:" once the cycle ends).
@@ -345,6 +351,129 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
                     }
                 }
                 ImGui::EndChild();
+            }
+        }
+    }
+
+    // --- Block 4: Evaluated Stat Sets + DPS -------------------------------
+    // EnumerateSkillStats returns the game's own evaluated stat containers for
+    // one skill: sorted {stat_id, value} pairs grouped by SetIndex. stat_id is
+    // the Stats.dat ROW INDEX + 1 (the engine's runtime stat key). Set 0 is the
+    // skill's CURRENT-CONTEXT set — always present, persists with panels
+    // closed, and carries the DPS the in-game skills panel shows. Later sets
+    // are per-part stat sets (summon/command skills — the minion damage lives
+    // there). The DPS family (691 = attacks/s*100, 692 = DPS*100,
+    // 695 = casts/s*100, 1982/1983 = avg damage *100) is computed by the game
+    // for contexts it displays; alt contexts (infusion tabs, weapon swap) are
+    // evaluated transiently and may not be present.
+    if (ImGui::CollapsingHeader("Evaluated Stat Sets + DPS")) {
+        if (skills.empty()) {
+            ImGui::TextDisabled("No active skills");
+        } else {
+            if (state.stat_sets_skill_index < 0
+                || state.stat_sets_skill_index >= (int)skills.size()) {
+                state.stat_sets_skill_index = 0;
+            }
+            const char* current = skills[state.stat_sets_skill_index].Name.c_str();
+            if (ImGui::BeginCombo("Skill##statsets", current)) {
+                for (int i = 0; i < (int)skills.size(); ++i) {
+                    bool selected = (i == state.stat_sets_skill_index);
+                    if (ImGui::Selectable(skills[i].Name.c_str(), selected)) {
+                        state.stat_sets_skill_index = i;
+                    }
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            const auto& sel = skills[state.stat_sets_skill_index];
+            // SkillDetailsAddr is same-frame fresh: `skills` was enumerated above.
+            auto stats = ctx->Components.EnumerateSkillStats(sel.SkillDetailsAddr);
+
+            // Derived DPS summary — scan every set for the DPS-family runtime ids.
+            // A stat can appear in several sets (multi-part skills); take the
+            // first occurrence, which is the game's primary evaluation.
+            struct { int set = -1; int value = 0; } dps, aps, cps, avg_hit, avg_use, show_avg, cast_ms;
+            for (const auto& e : stats) {
+                auto take = [&](decltype(dps)& slot) {
+                    if (slot.set < 0) { slot.set = e.SetIndex; slot.value = e.Value; }
+                };
+                switch (e.StatId) {
+                    case 691:  take(aps);      break;  // hundred_times_attacks_per_second
+                    case 692:  take(dps);      break;  // hundred_times_damage_per_second
+                    case 695:  take(cps);      break;  // hundred_times_casts_per_second
+                    case 1982: take(avg_hit);  break;  // hundred_times_average_damage_per_hit
+                    case 1983: take(avg_use);  break;  // hundred_times_average_damage_per_skill_use
+                    case 2079: take(show_avg); break;  // skill_show_average_damage_instead_of_dps
+                    case 694:  take(cast_ms);  break;  // base_spell_cast_time_ms
+                }
+            }
+
+            if (dps.set >= 0) {
+                ImGui::TextColored(ImVec4(0.3f, 1, 0.3f, 1),
+                                   "Game-computed DPS: %.2f  (stat 692, set %d)",
+                                   dps.value / 100.0, dps.set);
+            } else if (show_avg.set >= 0 && show_avg.value != 0) {
+                ImGui::TextColored(ImVec4(1, 0.8f, 0.3f, 1),
+                                   "This skill displays AVERAGE DAMAGE instead of DPS (stat 2079 set)");
+            } else {
+                ImGui::TextDisabled(
+                    "No DPS stat in this skill's evaluated sets (utility/support "
+                    "skill, or average-damage display mode).");
+            }
+            if (aps.set >= 0)     ImGui::Text("Attacks/s: %.2f", aps.value / 100.0);
+            if (cps.set >= 0)     ImGui::Text("Casts/s: %.2f", cps.value / 100.0);
+            if (avg_hit.set >= 0) ImGui::Text("Avg damage per hit: %.2f", avg_hit.value / 100.0);
+            if (avg_use.set >= 0) ImGui::Text("Avg damage per use: %.2f", avg_use.value / 100.0);
+            if (cast_ms.set >= 0) ImGui::Text("Base cast time: %d ms", cast_ms.value);
+            // Cross-check the game's formula: dps = rate/100 * avg (both x100).
+            if (dps.set >= 0 && avg_use.set >= 0 && (aps.set >= 0 || cps.set >= 0)) {
+                double rate = (aps.set >= 0 ? aps.value : cps.value) / 100.0;
+                ImGui::TextDisabled("Cross-check rate*avg = %.2f", rate * (avg_use.value / 100.0));
+            }
+            ImGui::Spacing();
+
+            if (stats.empty()) {
+                ImGui::TextDisabled("No stat sets resolved for this skill");
+            } else {
+                int currentSet = -1;
+                bool setOpen = false;
+                for (const auto& e : stats) {
+                    if (e.SetIndex != currentSet) {
+                        if (setOpen) { ImGui::EndTable(); ImGui::TreePop(); }
+                        currentSet = e.SetIndex;
+                        setOpen = false;
+                        int count = 0;
+                        for (const auto& e2 : stats) if (e2.SetIndex == currentSet) ++count;
+                        char label[64];
+                        std::snprintf(label, sizeof(label), "Set %d (%d stats)", currentSet, count);
+                        if (ImGui::TreeNode(label)) {
+                            if (ImGui::BeginTable("SkillStatT", 3,
+                                                  ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                                ImGui::TableSetupColumn("StatId (rid+1)", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+                                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+                                ImGui::TableSetupColumn("Value/100");
+                                ImGui::TableHeadersRow();
+                                setOpen = true;
+                            } else {
+                                ImGui::TreePop();
+                            }
+                        }
+                    }
+                    if (setOpen) {
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn(); ImGui::Text("%d", e.StatId);
+                        ImGui::TableNextColumn(); ImGui::Text("%d", e.Value);
+                        ImGui::TableNextColumn(); ImGui::Text("%.2f", e.Value / 100.0);
+                    }
+                }
+                if (setOpen) { ImGui::EndTable(); ImGui::TreePop(); }
+                ImGui::TextWrapped(
+                    "StatId is the Stats.dat row index + 1 (0 = the game's \"no "
+                    "stat\" sentinel). Resolve names by dumping Stats.dat: row "
+                    "690 = hundred_times_attacks_per_second -> runtime id 691, "
+                    "etc. Sets mirror the skill's GrantedEffectStatSets parts "
+                    "plus the merged character-context table (the big one).");
             }
         }
     }
