@@ -1,7 +1,10 @@
 // ============================================================================
 // ExampleSkills — Skill Bar Live View + Animation Timing Sampler + DAT Inspector
 // ============================================================================
-// Four blocks demonstrating the v6 SDK Active Skill surface:
+// Five blocks demonstrating the v6 SDK Active Skill surface:
+//   0. Bar Slots→DPS  — the headline use case: for each visible skill-bar slot,
+//                       resolve the skill via IsOnSkillBar/SkillSlotIndex and
+//                       read its game-computed DPS to overlay on that icon.
 //   1. Live View      — full per-frame table of every active skill
 //   2. Timing Sampler — empirically measures animation duration by sampling
 //                       Actor.AnimationId transitions, invalidates on buff
@@ -141,11 +144,60 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
         }
     }
 
+    // --- Block 0: Skill Bar Slots -> DPS (headline use case) -------------
+    // Each visible bar slot i is answered by the UNIQUE skill with
+    // IsOnSkillBar && SkillSlotIndex == i (host-decoded from the skill's packed
+    // id — see SkillBarDecode.h). This is exactly what a DPS-over-the-bar overlay
+    // needs: walk slots 0..N, resolve the skill, read its game-computed DPS
+    // (stat 692, EnumerateSkillStats) and draw it over that icon.
+    if (ImGui::CollapsingHeader("Skill Bar Slots -> DPS", ImGuiTreeNodeFlags_DefaultOpen)) {
+        int maxSlot = -1;
+        for (const auto& s : skills)
+            if (s.IsOnSkillBar && s.SkillSlotIndex > maxSlot) maxSlot = s.SkillSlotIndex;
+
+        if (maxSlot < 0) {
+            ImGui::TextDisabled("No skills detected on the main skill bar "
+                                "(open the game with skills socketed).");
+        } else if (ImGui::BeginTable("BarSlotsT", 3,
+                                     ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            ImGui::TableSetupColumn("Slot", ImGuiTableColumnFlags_WidthFixed, 44.0f);
+            ImGui::TableSetupColumn("Skill");
+            ImGui::TableSetupColumn("DPS (game, stat 692)");
+            ImGui::TableHeadersRow();
+            for (int i = 0; i <= maxSlot; ++i) {
+                const PluginSDK::ActiveSkill* found = nullptr;
+                for (const auto& s : skills)
+                    if (s.IsOnSkillBar && s.SkillSlotIndex == i) { found = &s; break; }
+
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn(); ImGui::Text("%d", i);
+                if (!found) {
+                    ImGui::TableNextColumn(); ImGui::TextDisabled("(empty)");
+                    ImGui::TableNextColumn(); ImGui::TextDisabled("-");
+                    continue;
+                }
+                ImGui::TableNextColumn(); ImGui::Text("%s", found->Name.c_str());
+
+                // Same-frame: `skills` was enumerated this frame, so
+                // SkillDetailsAddr is fresh. Pull the game-computed DPS.
+                int dps100 = -1;
+                for (const auto& e : ctx->Components.EnumerateSkillStats(found->SkillDetailsAddr)) {
+                    if (e.StatId == 692) { dps100 = e.Value; break; }
+                }
+                ImGui::TableNextColumn();
+                if (dps100 >= 0) ImGui::TextColored(ImVec4(0.3f, 1, 0.3f, 1), "%.2f", dps100 / 100.0);
+                else             ImGui::TextDisabled("n/a (utility / avg-dmg skill)");
+            }
+            ImGui::EndTable();
+        }
+    }
+
     // --- Block 1: Live View ----------------------------------------------
     if (ImGui::CollapsingHeader("Skill Bar Live View", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (ImGui::BeginTable("LiveSkillT", 7,
+        if (ImGui::BeginTable("LiveSkillT", 8,
                               ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
             ImGui::TableSetupColumn("Name");
+            ImGui::TableSetupColumn("Bar");
             ImGui::TableSetupColumn("Stage");
             ImGui::TableSetupColumn("Type");
             ImGui::TableSetupColumn("Uses");
@@ -156,6 +208,9 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
             for (const auto& s : skills) {
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn(); ImGui::Text("%s", s.Name.c_str());
+                ImGui::TableNextColumn();
+                if (s.IsOnSkillBar) ImGui::TextColored(ImVec4(0.3f, 1, 0.3f, 1), "#%d", s.SkillSlotIndex);
+                else                ImGui::TextDisabled("-");
                 ImGui::TableNextColumn(); ImGui::Text("%d", s.UseStage);
                 ImGui::TableNextColumn(); ImGui::Text("%d", s.CastType);
                 ImGui::TableNextColumn(); ImGui::Text("%d", s.TotalUses);
