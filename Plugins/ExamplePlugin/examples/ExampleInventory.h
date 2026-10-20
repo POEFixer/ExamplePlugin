@@ -306,14 +306,14 @@ inline void DrawInventoryPanel(
                 // Aggregated stats — only the known waystone/map header props.
                 bool anyKnown = false;
                 for (const auto& kv : agg)
-                    if (kv.first >= 8205 && kv.first <= 8209) { anyKnown = true; break; }
+                    if (kv.first >= 8206 && kv.first <= 8210) { anyKnown = true; break; }
                 if (anyKnown && ImGui::TreeNode("Aggregated Stats")) {
                     for (const auto& kv : agg) {
-                        const char* lbl = (kv.first == 8205) ? "Item Rarity"
-                                        : (kv.first == 8206) ? "Pack Size"
-                                        : (kv.first == 8207) ? "Monster Rarity"
-                                        : (kv.first == 8208) ? "Monster Effectiveness"
-                                        : (kv.first == 8209) ? "Waystone Drop Chance" : nullptr;
+                        const char* lbl = (kv.first == 8206) ? "Item Rarity"
+                                        : (kv.first == 8207) ? "Pack Size"
+                                        : (kv.first == 8208) ? "Monster Rarity"
+                                        : (kv.first == 8209) ? "Monster Effectiveness"
+                                        : (kv.first == 8210) ? "Waystone Drop Chance" : nullptr;
                         if (lbl) ImGui::Text("%s: %+d%%", lbl, kv.second);
                     }
                     ImGui::TreePop();

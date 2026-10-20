@@ -25,7 +25,7 @@ Navigates the game's full UI element tree. Shows element properties (position, s
 Demonstrates the SDK v6 Component Reader API and UI Element API. Exercises all 22 component readers, 4 enumerators, and 10 convenience helpers directly from entity addresses without hardcoded offsets. Shows UI tree navigation using `GetUiChildren`, `ReadUiElement`, and `ComputeUiScreenRect`. Demonstrates helpers like `GetHealthPercent`, `IsAlive`, `GetPlayerName`, `GetItemRarity`, `IsItemIdentified`, `GetStackCount`.
 
 ### Render, Terrain, Events, Log tabs
-Exercise the remaining service surface: WorldToScreen + map projection, walkable/height grid + TgtLocation enumeration, OnFrame/OnAreaChange/OnGameAttached/OnGameDetached event hooks with live counters, and Log.Debug/Info/Warn/Error fire buttons.
+Exercise the remaining service surface: WorldToScreen + map projection, walkable/height grid + TgtLocation enumeration, the area's generated rooms (`.arm` path, grid centre and distance, filtered with the Radar's room pattern rule), OnFrame/OnAreaChange/OnGameAttached/OnGameDetached event hooks with live counters, and Log.Debug/Info/Warn/Error fire buttons. The Area & Vitals tab lists the current map's area modifiers with their Stats.dat Ids.
 
 ### SDK Coverage Summary
 The settings tab shows a `SDK Coverage: N/10 services responding` banner above the tab bar. Hover for per-service status (Game, Entities, Components, Inventory, Ui, Render, Terrain, Memory, Log, Events).

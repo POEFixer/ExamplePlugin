@@ -241,6 +241,18 @@ private:
             ImGui::Text("Screen: %dx%d", snapshot.ScreenWidth, snapshot.ScreenHeight);
         }
 
+        // Map modifiers: match on StatId (the Stats.dat Id), not on statRowIndex,
+        // which moves when a patch inserts Stats.dat rows.
+        if (ImGui::CollapsingHeader("Area Modifiers")) {
+            const auto mods = ctx()->Game.GetAreaMods();
+            if (mods.empty()) ImGui::TextDisabled("No area modifiers (not in a map?)");
+            for (const auto& mod : mods) {
+                ImGui::BulletText("%s", mod.text.c_str());
+                ImGui::SameLine();
+                ImGui::TextDisabled("%s = %d", mod.statId.empty() ? "(older host: no id)" : mod.statId.c_str(), mod.value);
+            }
+        }
+
         if (ImGui::CollapsingHeader("Player Vitals", ImGuiTreeNodeFlags_DefaultOpen)) {
             const auto& v = snapshot.Vitals;
 

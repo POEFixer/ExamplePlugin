@@ -2,6 +2,7 @@
 // Demonstrates every TerrainService method.
 
 #pragma once
+#include <cmath>
 #include "../../../POEFixer/plugin_sdk/PluginSDK.h"
 #include "../../../POEFixer/imgui/imgui.h"
 #include "SdkStatus.h"
@@ -71,6 +72,36 @@ inline void DrawTerrainPanel(const PluginSDK::Context* ctx,
         }
         if (count == 0) StatusBadge(StatusLevel::Warn, "No tgt tiles (likely not in dungeon area)");
         else StatusBadge(StatusLevel::Ok, "Tgt enumeration working");
+    }
+
+    // The area's generated rooms (.arm), as the host Radar matches its room
+    // targets. The copy is refreshed only when GetAreaRoomsRevision() changes
+    // (it is 0 while the list is not ready), so an open panel does not copy
+    // every room each frame.
+    if (ImGui::CollapsingHeader("Area Rooms")) {
+        static PluginSDK::AreaRooms rooms;
+        if (!rooms.Supported || ctx->Terrain.GetAreaRoomsRevision() != rooms.Revision)
+            rooms = ctx->Terrain.GetAreaRooms();
+        if (!rooms.Supported) {
+            StatusBadge(StatusLevel::Warn, "Host predates GetAreaRooms");
+        } else if (!rooms.Ready) {
+            StatusBadge(StatusLevel::Warn, "Room list not ready (loading or not in game)");
+        } else {
+            static char pattern[160] = "*";
+            ImGui::InputText("Pattern (* only, case ignored)", pattern, sizeof(pattern));
+            ImGui::Text("Rooms: %zu  revision: %llu", rooms.Rooms.size(),
+                static_cast<unsigned long long>(rooms.Revision));
+            int shown = 0;
+            for (const auto& room : rooms.Rooms) {
+                if (!room.Matches(pattern)) continue;
+                if (++shown > 40) { ImGui::TextDisabled("..."); break; }
+                const float dx = room.GridX - snap.Player.GridPositionX;
+                const float dy = room.GridY - snap.Player.GridPositionY;
+                ImGui::BulletText("%s  centre (%.0f, %.0f), %.0f cells away", room.Name.c_str(),
+                    room.GridX, room.GridY, std::sqrt(dx * dx + dy * dy));
+            }
+            StatusBadge(StatusLevel::Ok, "Room list working");
+        }
     }
 }
 
