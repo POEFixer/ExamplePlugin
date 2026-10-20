@@ -10,8 +10,8 @@
 //                       Actor.AnimationId transitions, invalidates on buff
 //                       changes. The recommended pattern for combat-macro
 //                       plugins.
-//   3. DAT Inspector  — hex-dumps the 0x100-byte ActiveSkillDetails struct
-//                       via Memory.Read so authors can reverse new fields
+//   3. DAT Inspector  — hex-dumps the leading bytes of the ActiveSkillDetails
+//                       object via Memory.Read so authors can reverse new fields
 //                       without touching the SDK.
 //   4. Stat Sets/DPS  — EnumerateSkillStats: the game's evaluated per-skill
 //                       stat containers ({stat_id, value} pairs, stat_id =
