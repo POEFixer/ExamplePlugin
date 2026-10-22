@@ -505,6 +505,6 @@ extern "C" PLUGIN_API void DestroyPlugin(PluginSDK::Plugin* plugin) {
 POEFIXER_PLUGIN_INFO(
     "ExamplePlugin",
     "Example Plugin",
-    "1.0.1",
+    "1.0.2",
     "POEFixer",
     "Reference plugin for developers: live demos of every SDK service, from entities, buffs and inventories to the game UI tree, memory and prices.")
