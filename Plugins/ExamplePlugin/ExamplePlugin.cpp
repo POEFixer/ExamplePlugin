@@ -102,9 +102,9 @@ public:
 
         // --- Demo tabs -------------------------------------------------------
         BeginCard("##examplePanels");
-        Heading(ICON_FA_TABLE_COLUMNS, "Demo tabs");
-        HelpMarker("Each switch adds one tab to the info window.\n"
-                   "Every tab demonstrates one SDK service; its source is in examples/.");
+        Heading(ICON_FA_TABLE_COLUMNS, "Demo tabs",
+                "Each switch adds one tab to the info window.\n"
+                "Every tab demonstrates one SDK service; its source is in examples/.");
         ImGui::BeginDisabled(!m_ShowWindow);
         // Groups 0-1 and 2-3 side by side when the card is wide enough, else stacked.
         auto drawGroups = [&](int firstGroup, int lastGroup) {
@@ -505,6 +505,6 @@ extern "C" PLUGIN_API void DestroyPlugin(PluginSDK::Plugin* plugin) {
 POEFIXER_PLUGIN_INFO(
     "ExamplePlugin",
     "Example Plugin",
-    "1.0.0",
+    "1.0.1",
     "POEFixer",
     "Reference plugin for developers: live demos of every SDK service, from entities, buffs and inventories to the game UI tree, memory and prices.")
