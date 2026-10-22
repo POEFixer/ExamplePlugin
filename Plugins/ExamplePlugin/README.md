@@ -30,10 +30,24 @@ Exercise the remaining service surface: WorldToScreen + map projection, walkable
 ### SDK Coverage Summary
 The settings tab shows a `SDK Coverage: N/10 services responding` banner above the tab bar. Hover for per-service status (Game, Entities, Components, Inventory, Ui, Render, Terrain, Memory, Log, Events).
 
+## Settings
+
+The settings tab is the reference layout for plugin settings, built with the plugin UI
+kit `POEFixer/plugin_sdk/PluginUi.h`: one card per section, one measured label column
+per block, a wrapped tooltip on every non-obvious control, dependent controls dimmed
+rather than hidden. It has the info-window switch, overlay mode, window opacity, a
+toggle hotkey (a key, or the right, middle or a side mouse button; it shows or hides the info window in game)
+and one switch per demo tab.
+
+`tools/plugin_ui_preview` renders a plugin's settings tab to PNG at several widths and
+font scales without the game (see its README).
+
 ## Creating Your Own Plugin
 
 1. Copy `Plugins/ExamplePlugin/` to `Plugins/YourPlugin/` (keep the `POEFixer/` folder next to `Plugins/`: the project compiles against `POEFixer/plugin_sdk` and `POEFixer/imgui` by relative path)
 2. Rename the .vcxproj and main .cpp, give the project a new `ProjectGuid`, and add it to a solution (or copy `ExamplePlugin.sln` and point it at the new project)
 3. Subclass `PluginSDK::Plugin` and override the lifecycle hooks (see `ExamplePlugin.cpp`)
-4. Use `ctx()->Service.Method(...)` to access game data (Game, Entities, Components, Inventory, Ui, Render, Terrain, Memory, Log, Events, Overlay, Flasks, Prices, Runeshape, Atlas, Sekhema)
-5. Build and copy the DLL to `Plugins/YourPlugin/` next to the POEFixer executable
+4. Describe it once with `POEFIXER_PLUGIN_INFO(...)` after including `imgui.h` (id = folder and DLL name, display name, version `X.Y.Z`, author, one short description; see the end of `ExamplePlugin.cpp`). POE2Fixer refuses a DLL without it
+5. Use `ctx()->Service.Method(...)` to access game data (Game, Entities, Components, Inventory, Ui, Render, Terrain, Memory, Log, Events, Overlay, Flasks, Prices, Runeshape, Atlas, Sekhema)
+6. Lay out `DrawSettings()` with `PluginUi.h` (cards, label columns, tips)
+7. Build and copy the DLL to `Plugins/YourPlugin/` next to the POEFixer executable

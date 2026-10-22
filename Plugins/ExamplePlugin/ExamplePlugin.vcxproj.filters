@@ -58,6 +58,9 @@
     <ClInclude Include="..\..\POEFixer\plugin_sdk\PluginSDK.h">
       <Filter>api</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\POEFixer\plugin_sdk\PluginUi.h">
+      <Filter>api</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="examples">

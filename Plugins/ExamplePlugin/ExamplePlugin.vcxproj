@@ -91,6 +91,7 @@
   <ItemGroup>
     <ClInclude Include="..\..\POEFixer\plugin_sdk\PluginAbi.h" />
     <ClInclude Include="..\..\POEFixer\plugin_sdk\PluginSDK.h" />
+    <ClInclude Include="..\..\POEFixer\plugin_sdk\PluginUi.h" />
     <ClInclude Include="examples\ComponentReader.h" />
     <ClInclude Include="examples\ExampleBuffs.h" />
     <ClInclude Include="examples\ExampleEntities.h" />

@@ -200,7 +200,7 @@ private:
         ImVec2 size(w, h);
         ImDrawList* dl = ImGui::GetForegroundDrawList();
         ImVec2 maxPos(pos.x + size.x, pos.y + size.y);
-        dl->AddRect(pos, maxPos, color, 0.0f, 0, 2.0f);
+        dl->AddRect(pos, maxPos, color, 0.0f, 2.0f, ImDrawFlags_StrokeCenter);
         ImU32 fillColor = (color & 0x00FFFFFF) | 0x18000000;
         dl->AddRectFilled(pos, maxPos, fillColor);
         if (!label.empty()) {

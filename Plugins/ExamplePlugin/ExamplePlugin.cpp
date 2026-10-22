@@ -17,6 +17,8 @@
 
 #include "../../POEFixer/plugin_sdk/PluginSDK.h"
 #include "../../POEFixer/imgui/imgui.h"
+#include "../../POEFixer/imgui/IconsFontAwesome6.h"
+#include "../../POEFixer/plugin_sdk/PluginUi.h"
 
 #include "examples/ExampleBuffs.h"
 #include "examples/ExampleEntities.h"
@@ -38,6 +40,7 @@
 #include <string>
 #include <chrono>
 #include <cfloat>
+#include <algorithm>
 
 class ExamplePlugin : public PluginSDK::Plugin {
 public:
@@ -61,29 +64,104 @@ public:
         ctx()->Log.Info("ExamplePlugin v6 disabled");
     }
 
+    // Settings use the plugin UI kit (PluginUi.h): one card per section, one
+    // measured label column per block, a tip on every non-obvious control,
+    // dependents dimmed rather than hidden. This is the reference layout for
+    // plugin settings; tools/plugin_ui_preview renders it to PNG.
     void DrawSettings() override {
-        ImGui::Checkbox("Show Info Window", &m_ShowWindow);
-        ImGui::Separator();
-        ImGui::Text("Panels:");
-        ImGui::Checkbox("Player Buffs",      &m_ShowBuffs);
-        ImGui::Checkbox("Nearby Entities",   &m_ShowEntities);
-        ImGui::Checkbox("Inventories",       &m_ShowInventory);
-        ImGui::Checkbox("Flasks & Charms",   &m_ShowFlasks);
-        ImGui::Checkbox("Memory Info",       &m_ShowMemoryInfo);
-        ImGui::Checkbox("Game UI Explorer",  &m_ShowUiExplorer);
-        ImGui::Checkbox("Component Reader",  &m_ShowComponentReader);
-        ImGui::Checkbox("Render Demo",       &m_ShowRender);
-        ImGui::Checkbox("Terrain Demo",      &m_ShowTerrain);
-        ImGui::Checkbox("Events Demo",       &m_ShowEvents);
-        ImGui::Checkbox("Log Demo",          &m_ShowLog);
-        ImGui::Checkbox("Skills & Timing",   &m_ShowSkills);
-        ImGui::Checkbox("Prices (poe2scout)",&m_ShowPrices);
-        ImGui::Separator();
-        ImGui::Checkbox("Enable Overlay Mode", &m_WantsOverlay);
-        ImGui::SliderFloat("Window Opacity", &m_WindowAlpha, 0.3f, 1.0f, "%.1f");
+        using namespace PluginUi;
+        bool changed = false;
+
+        // --- Window ----------------------------------------------------------
+        BeginCard("##exampleWindow");
+        Heading(ICON_FA_WINDOW_MAXIMIZE, "Info window");
+        changed |= Check("Show the info window", "showWindow", &m_ShowWindow,
+                         "Opens the Example Plugin window with one tab per demo.\n"
+                         "Closing the window with its X turns this off.");
+        ImGui::SameLine();
+        StatusPill(HostCompatible() ? "Host SDK v6" : "Host too old",
+                   ImGui::ColorConvertFloat4ToU32(HostCompatible() ? Colors().Success : Colors().Error));
+        Tip("Whether this POE2Fixer offers every service the plugin was built for.\n"
+            "When it does not, the services answer empty values.");
+        changed |= Check("Overlay mode", "overlay", &m_WantsOverlay,
+                         "Asks the host to draw over the game (the overlay window).\n"
+                         "Off: the window only shows while the POE2Fixer menu is open.");
+        {
+            const LabelColumn col({ "Window opacity", "Toggle hotkey" });
+            ImGui::BeginDisabled(!m_ShowWindow);
+            changed |= SliderFloatRow(col, "Window opacity", "##opacity", &m_WindowAlpha, 0.3f, 1.0f, "%.1f",
+                                      "How see-through the window background is.\n1.0 is fully opaque.");
+            ImGui::EndDisabled();
+            col.RowNoWidth("Toggle hotkey");
+            changed |= HotkeyCapture("##toggleKey", &m_ToggleKey,
+                                     "A key that shows or hides the info window while you play.\n"
+                                     "Click, then press a key or a mouse button; Esc cancels.");
+        }
+        EndCard();
+        ImGui::Spacing();
+
+        // --- Demo tabs -------------------------------------------------------
+        BeginCard("##examplePanels");
+        Heading(ICON_FA_TABLE_COLUMNS, "Demo tabs");
+        HelpMarker("Each switch adds one tab to the info window.\n"
+                   "Every tab demonstrates one SDK service; its source is in examples/.");
+        ImGui::BeginDisabled(!m_ShowWindow);
+        // Groups 0-1 and 2-3 side by side when the card is wide enough, else stacked.
+        auto drawGroups = [&](int firstGroup, int lastGroup) {
+            int shown = -1;
+            for (const PanelSwitch& s : kPanels) {
+                if (s.group < firstGroup || s.group > lastGroup) continue;
+                if (s.group != shown) {
+                    if (shown >= 0) ImGui::Spacing();
+                    ImGui::TextDisabled("%s", kPanelGroups[s.group]);
+                    shown = s.group;
+                }
+                changed |= Check(s.label, s.id, &(this->*s.member), s.tip);
+            }
+        };
+        if (WideEnoughForTwoColumns()) {
+            // Explicit positions rather than SameLine: a text line placed after a
+            // group of framed rows would inherit their baseline offset.
+            const ImVec2 start = ImGui::GetCursorPos();
+            const float half = (ImGui::GetContentRegionAvail().x + ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+            ImGui::BeginGroup();
+            drawGroups(0, 1);
+            ImGui::EndGroup();
+            const float leftBottom = ImGui::GetCursorPosY();
+            ImGui::SetCursorPos(ImVec2(start.x + half, start.y));
+            ImGui::BeginGroup();
+            drawGroups(2, 3);
+            ImGui::EndGroup();
+            const float rightBottom = ImGui::GetCursorPosY();
+            ImGui::SetCursorPos(ImVec2(start.x, (std::max)(leftBottom, rightBottom)));
+        } else {
+            drawGroups(0, 1);
+            ImGui::Spacing();
+            drawGroups(2, 3);
+        }
+        ImGui::EndDisabled();
+
+        ImGui::Spacing();
+        const char* resetLabel = ICON_FA_ROTATE_LEFT "  Reset tabs###resetTabs";
+        AlignRight(ButtonWidth(resetLabel));
+        if (SubtleButton(resetLabel)) ImGui::OpenPopup("##confirmReset");
+        Tip("Turns every demo tab back to its default.");
+        if (ConfirmPopup("##confirmReset", "Turn every demo tab back to its default?", "Reset", "Cancel")) {
+            for (const PanelSwitch& s : kPanels) this->*s.member = s.defaultOn;
+            changed = true;
+        }
+        EndCard();
+
+        if (changed) SaveSettings();
     }
 
     void DrawUI() override {
+        // Toggle hotkey: one cheap key-state read per frame, edge-triggered.
+        if (m_ToggleKey != 0) {
+            const bool down = (::GetAsyncKeyState(m_ToggleKey) & 0x8000) != 0;
+            if (down && !m_ToggleKeyDown) m_ShowWindow = !m_ShowWindow;
+            m_ToggleKeyDown = down;
+        }
         if (!m_ShowWindow) return;
         if (ctx()->ImGuiContext)
             ImGui::SetCurrentContext(static_cast<ImGuiContext*>(ctx()->ImGuiContext));
@@ -225,6 +303,7 @@ public:
         file << "ShowPrices=" << (m_ShowPrices ? 1 : 0) << "\n";
         file << "WantsOverlay=" << (m_WantsOverlay ? 1 : 0) << "\n";
         file << "WindowAlpha=" << m_WindowAlpha << "\n";
+        file << "ToggleKey=" << m_ToggleKey << "\n";
     }
 
 private:
@@ -338,7 +417,10 @@ private:
             else if (key == "ShowPrices")          m_ShowPrices = (val == "1");
             else if (key == "WantsOverlay")        m_WantsOverlay = (val == "1");
             else if (key == "WindowAlpha") {
-                try { m_WindowAlpha = std::stof(val); } catch (...) {}
+                try { m_WindowAlpha = std::clamp(std::stof(val), 0.3f, 1.0f); } catch (...) {}
+            }
+            else if (key == "ToggleKey") {
+                try { m_ToggleKey = std::clamp(std::stoi(val), 0, 0xFE); } catch (...) {}
             }
         }
     }
@@ -360,6 +442,47 @@ private:
     Examples::SkillsTabState m_skillsState;
     bool m_WantsOverlay = false;
     float m_WindowAlpha = 0.9f;
+    int m_ToggleKey = 0;            // Windows virtual-key code, 0 = none
+    bool m_ToggleKeyDown = false;
+
+    // The demo-tab switches, drawn by DrawSettings in groups.
+    struct PanelSwitch {
+        const char* label;
+        const char* id;
+        bool ExamplePlugin::* member;
+        bool defaultOn;
+        int group;
+        const char* tip;
+    };
+    static constexpr const char* kPanelGroups[] = { "Player and items", "Prices", "Inspectors", "Services" };
+    static constexpr PanelSwitch kPanels[] = {
+        { "Player buffs", "buffs", &ExamplePlugin::m_ShowBuffs, true, 0,
+          "Active buffs with remaining time, charges and a text filter." },
+        { "Flasks and charms", "flasks", &ExamplePlugin::m_ShowFlasks, true, 0,
+          "Flask and charm slots, charges and active state." },
+        { "Inventories", "inventory", &ExamplePlugin::m_ShowInventory, false, 0,
+          "Inventory grids with item details and mods.\nScans at most once a second." },
+        { "Skills and timing", "skills", &ExamplePlugin::m_ShowSkills, true, 0,
+          "The skill bar, cooldowns and cast timing." },
+        { "Prices", "prices", &ExamplePlugin::m_ShowPrices, true, 1,
+          "Item prices through the host's price service\n(source and league: POE2Fixer Settings -> Prices)." },
+        { "Nearby entities", "entities", &ExamplePlugin::m_ShowEntities, true, 2,
+          "Monsters, NPCs, chests and items around you,\nwith their components." },
+        { "Component reader", "components", &ExamplePlugin::m_ShowComponentReader, false, 2,
+          "Every component reader and UI element helper of the SDK." },
+        { "Game UI explorer", "uiExplorer", &ExamplePlugin::m_ShowUiExplorer, false, 2,
+          "Browse the game's UI tree; highlights the selected element." },
+        { "Memory viewer", "memory", &ExamplePlugin::m_ShowMemoryInfo, false, 2,
+          "Hex view and typed reads through the memory service." },
+        { "Render demo", "render", &ExamplePlugin::m_ShowRender, true, 3,
+          "World-to-screen projection and overlay drawing." },
+        { "Terrain demo", "terrain", &ExamplePlugin::m_ShowTerrain, true, 3,
+          "Walkable grid and terrain height queries." },
+        { "Events demo", "events", &ExamplePlugin::m_ShowEvents, true, 3,
+          "Area change, frame and attach events as they arrive." },
+        { "Log demo", "log", &ExamplePlugin::m_ShowLog, true, 3,
+          "Writes lines to the POE2Fixer log at each level." },
+    };
     std::chrono::steady_clock::time_point m_LastInventoryScan;
     Examples::PluginUiExplorer m_UiExplorer;
     Examples::EventsDemoState m_eventsState;
@@ -377,3 +500,11 @@ extern "C" PLUGIN_API PluginSDK::Plugin* CreatePlugin() {
 extern "C" PLUGIN_API void DestroyPlugin(PluginSDK::Plugin* plugin) {
     delete plugin;
 }
+
+// Plugin info: the host checks it before CreatePlugin; the publish tool reads it.
+POEFIXER_PLUGIN_INFO(
+    "ExamplePlugin",
+    "Example Plugin",
+    "1.0.0",
+    "POEFixer",
+    "Reference plugin for developers: live demos of every SDK service, from entities, buffs and inventories to the game UI tree, memory and prices.")

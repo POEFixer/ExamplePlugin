@@ -352,7 +352,7 @@ inline void DrawEntitiesPanel(const PluginSDK::Context* ctx,
         "DeliriumBomb", "DeliriumSpawner", "Important", "Item", "Renderable",
         "AreaTransition", "ExpeditionMarker", "ExpeditionRemnant", "AzmeriWisp"
     };
-    ImGui::Combo("Filter by Type", &typeFilter, typeNames, IM_ARRAYSIZE(typeNames));
+    ImGui::Combo("Filter by Type", &typeFilter, typeNames, IM_COUNTOF(typeNames));
 
     int shown = 0;
     for (const auto& e : snapshot.Entities) {
