@@ -1,8 +1,8 @@
 # ExamplePlugin — POE2Fixer Plugin SDK Example
 
-Current version: 1.0.2
+Current version: 1.0.3
 
-Requires POE2Fixer 364 or newer.
+Requires POE2Fixer 366 or newer.
 
 A reference plugin demonstrating all features of the POE2Fixer Plugin SDK (v6). Use this as a starting point for building your own plugins.
 
@@ -46,6 +46,34 @@ and one switch per demo tab.
 `tools/plugin_ui_preview` renders a plugin's settings tab to PNG at several widths and
 font scales without the game (see its README).
 
+## Informational windows (PluginInfoWindow.h)
+
+The info window is drawn through `PluginSDK::InfoWindow` (`POEFixer/plugin_sdk/PluginInfoWindow.h`)
+instead of `ImGui::Begin` / `End`. With POE2Fixer 366 or later the host gives such a window a gear
+menu (Lock window, Game overlay mode, Reset position, Close) and remembers its position (separately
+in and out of the game), size and collapsed state; with Game overlay mode off the window is drawn
+outside the game, anywhere on the screens, in another ImGui context. On an older host it is a plain
+window at `legacyPos` / `defaultPos`. Rules:
+
+- Never `SetNextWindowPos` / `SetNextWindowCollapsed` for it (`SetNextWindowSize` only for an `AlwaysAutoResize` or `NoResize` window). `legacyPos` / `legacyCollapsed` seed the host's store once from a position the plugin saved before.
+- Push window-level style and call `SetNextWindowBgAlpha` / `SetNextWindowSizeConstraints` before it; pop only after it ended (wrap it in its own `{ }` block).
+- Inside it draw only into the window: no `GetForegroundDrawList`. Draw over the game after the window ended (the UI Explorer's highlights do). `Detached()` tells whether it is out of the game: an in-game hover test or `Overlay.SetWantsOverlayInput` applies only in game.
+- Close clears the flag passed as `open`; save it then like any setting.
+
+```cpp
+PluginSDK::InfoWindowOptions o;
+o.id = "main";                      // stable, 1-48 of [A-Za-z0-9_.-]
+o.title = "My window";              // nullptr with ImGuiWindowFlags_NoTitleBar
+o.defaultPos = ImVec2(60, 60);
+o.defaultSize = ImVec2(480, 420);   // resizable windows only
+ImGui::SetNextWindowBgAlpha(m_alpha);
+{
+    PluginSDK::InfoWindow window(ctx()->Overlay, o, &m_showWindow);   // Close clears m_showWindow
+    if (window) ImGui::Text("...");
+}                                   // the window ends here
+if (!m_showWindow) SaveSettings();
+```
+
 ## Creating Your Own Plugin
 
 1. Copy `Plugins/ExamplePlugin/` to `Plugins/YourPlugin/` (keep the `POEFixer/` folder next to `Plugins/`: the project compiles against `POEFixer/plugin_sdk` and `POEFixer/imgui` by relative path)
@@ -53,8 +81,9 @@ font scales without the game (see its README).
 3. Subclass `PluginSDK::Plugin` and override the lifecycle hooks (see `ExamplePlugin.cpp`)
 4. Describe it once with `POEFIXER_PLUGIN_INFO(...)` after including `imgui.h` (id = folder and DLL name, display name, version `X.Y.Z`, author, one short description; see the end of `ExamplePlugin.cpp`). POE2Fixer refuses a DLL without it
 5. Use `ctx()->Service.Method(...)` to access game data (Game, Entities, Components, Inventory, Ui, Render, Terrain, Memory, Log, Events, Overlay, Flasks, Prices, Runeshape, Atlas, Sekhema)
-6. Lay out `DrawSettings()` with `PluginUi.h` (cards, label columns, tips)
-7. Build and copy the DLL to `Plugins/YourPlugin/` next to the POEFixer executable
+6. Start `OnEnable()`, `DrawSettings()` and `DrawUI()` with `ImGui::SetCurrentContext(ctx()->ImGuiContext)` (`BindImGui()` in `ExamplePlugin.cpp`). With Settings -> "Separate menu window" `DrawSettings()` runs in the menu window's ImGui context and `DrawUI()` in the in-game overlay's, each with its own frame count, time, display size and windows: never compare `ImGui::GetFrameCount()`, ids or windows between the two, and in `DrawSettings()` take the game's size from `ctx()->Game.GetScreenSize()`, not `io.DisplaySize`
+7. Lay out `DrawSettings()` with `PluginUi.h` (cards, label columns, tips)
+8. Build and copy the DLL to `Plugins/YourPlugin/` next to the POEFixer executable
 
 ## Install
 

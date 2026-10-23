@@ -29,6 +29,7 @@ public:
             return;
         }
         m_Ctx = ctx;
+        m_Highlights.clear();
 
         if (m_CurrentAddress == 0) {
             uintptr_t gameUi = ctx->Ui.GetGameUiRoot();
@@ -152,6 +153,34 @@ public:
         }
     }
 
+    // Draws the highlights Draw() recorded this frame over the game, then forgets
+    // them. Call it AFTER the window that holds the explorer has ended: that window
+    // is an informational window (PluginInfoWindow.h), which the host may draw out
+    // of the game in another ImGui context, where a foreground draw list would show
+    // nothing. After the window the plugin is back in the game overlay's context.
+    void DrawHighlights() {
+        if (m_Ctx) {
+            ImDrawList* dl = ImGui::GetForegroundDrawList();
+            for (const Highlight& hl : m_Highlights) {
+                float x, y, w, h;
+                if (!m_Ctx->Ui.ComputeScreenRect(hl.Address, x, y, w, h)) continue;
+                if (w <= 0 || h <= 0) continue;
+                const ImVec2 pos(x, y);
+                const ImVec2 maxPos(x + w, y + h);
+                dl->AddRect(pos, maxPos, hl.Color, 0.0f, 2.0f, ImDrawFlags_StrokeCenter);
+                const ImU32 fillColor = (hl.Color & 0x00FFFFFF) | 0x18000000;
+                dl->AddRectFilled(pos, maxPos, fillColor);
+                if (!hl.Label.empty()) {
+                    const ImVec2 textSize = ImGui::CalcTextSize(hl.Label.c_str());
+                    const ImVec2 textBgMax(pos.x + textSize.x + 4, pos.y + textSize.y + 2);
+                    dl->AddRectFilled(pos, textBgMax, IM_COL32(0, 0, 0, 180));
+                    dl->AddText(ImVec2(pos.x + 2, pos.y + 1), hl.Color, hl.Label.c_str());
+                }
+            }
+        }
+        m_Highlights.clear();
+    }
+
 private:
     // Sanity-check an address before treating it as a UI element. The bridge
     // already filters obviously bad pointers (kernel range, < 0x10000), but
@@ -192,23 +221,10 @@ private:
         m_ChildAddresses = m_Ctx->Ui.GetChildren(m_CurrentAddress);
     }
 
+    // Records a highlight of a game UI element; DrawHighlights() draws it over the
+    // game once the window has ended (see there).
     void DrawHighlighter(uintptr_t addr, ImU32 color, const std::string& label = "") {
-        float x, y, w, h;
-        if (!m_Ctx->Ui.ComputeScreenRect(addr, x, y, w, h)) return;
-        if (w <= 0 || h <= 0) return;
-        ImVec2 pos(x, y);
-        ImVec2 size(w, h);
-        ImDrawList* dl = ImGui::GetForegroundDrawList();
-        ImVec2 maxPos(pos.x + size.x, pos.y + size.y);
-        dl->AddRect(pos, maxPos, color, 0.0f, 2.0f, ImDrawFlags_StrokeCenter);
-        ImU32 fillColor = (color & 0x00FFFFFF) | 0x18000000;
-        dl->AddRectFilled(pos, maxPos, fillColor);
-        if (!label.empty()) {
-            ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
-            ImVec2 textBgMax(pos.x + textSize.x + 4, pos.y + textSize.y + 2);
-            dl->AddRectFilled(pos, textBgMax, IM_COL32(0, 0, 0, 180));
-            dl->AddText(ImVec2(pos.x + 2, pos.y + 1), color, label.c_str());
-        }
+        m_Highlights.push_back({ addr, color, label });
     }
 
     void DrawBreadcrumbs() {
@@ -579,6 +595,13 @@ private:
 
     char m_SearchBuffer[128] = {};
     std::vector<std::pair<uintptr_t, std::string>> m_SearchResults;
+
+    struct Highlight {
+        uintptr_t Address = 0;
+        ImU32 Color = 0;
+        std::string Label;
+    };
+    std::vector<Highlight> m_Highlights;   // recorded by Draw(), drawn by DrawHighlights()
 };
 
 } // namespace Examples

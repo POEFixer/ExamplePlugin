@@ -13,12 +13,15 @@
 //   - Memory Info with hex viewer
 //   - Game UI Explorer (via v6 Ui service — no raw offsets)
 //   - Overlay mode support
+//   - The info window as a host informational window (PluginInfoWindow.h):
+//     gear menu, in / out of game, remembered place (see DrawUI)
 // ============================================================================
 
 #include "../../POEFixer/plugin_sdk/PluginSDK.h"
 #include "../../POEFixer/imgui/imgui.h"
 #include "../../POEFixer/imgui/IconsFontAwesome6.h"
 #include "../../POEFixer/plugin_sdk/PluginUi.h"
+#include "../../POEFixer/plugin_sdk/PluginInfoWindow.h"   // informational windows (see DrawUI)
 
 #include "examples/ExampleBuffs.h"
 #include "examples/ExampleEntities.h"
@@ -53,8 +56,7 @@ public:
 
     void OnEnable(bool /*isGameAttached*/) override {
         LoadSettings();
-        if (ctx()->ImGuiContext)
-            ImGui::SetCurrentContext(static_cast<ImGuiContext*>(ctx()->ImGuiContext));
+        BindImGui();
         Examples::SubscribeAll(ctx(), m_eventsState);
         ctx()->Log.Info("ExamplePlugin v6 enabled");
     }
@@ -69,6 +71,7 @@ public:
     // dependents dimmed rather than hidden. This is the reference layout for
     // plugin settings; tools/plugin_ui_preview renders it to PNG.
     void DrawSettings() override {
+        BindImGui();   // the menu's context (see BindImGui)
         using namespace PluginUi;
         bool changed = false;
 
@@ -77,7 +80,9 @@ public:
         Heading(ICON_FA_WINDOW_MAXIMIZE, "Info window");
         changed |= Check("Show the info window", "showWindow", &m_ShowWindow,
                          "Opens the Example Plugin window with one tab per demo.\n"
-                         "Closing the window with its X turns this off.");
+                         "Its gear menu locks it, takes it out of the game onto any\n"
+                         "screen or resets its position. Closing the window (its X or\n"
+                         "the gear menu) turns this off.");
         ImGui::SameLine();
         StatusPill(HostCompatible() ? "Host SDK v6" : "Host too old",
                    ImGui::ColorConvertFloat4ToU32(HostCompatible() ? Colors().Success : Colors().Error));
@@ -156,6 +161,7 @@ public:
     }
 
     void DrawUI() override {
+        BindImGui();   // the in-game overlay's context (see BindImGui)
         // Toggle hotkey: one cheap key-state read per frame, edge-triggered.
         if (m_ToggleKey != 0) {
             const bool down = (::GetAsyncKeyState(m_ToggleKey) & 0x8000) != 0;
@@ -163,22 +169,48 @@ public:
             m_ToggleKeyDown = down;
         }
         if (!m_ShowWindow) return;
-        if (ctx()->ImGuiContext)
-            ImGui::SetCurrentContext(static_cast<ImGuiContext*>(ctx()->ImGuiContext));
 
         PluginSDK::Snapshot snapshot = ctx()->Game.GetSnapshot();
 
+        // --- Informational window (PluginInfoWindow.h, POEFixer 366+) ---------
+        // PluginSDK::InfoWindow replaces ImGui::Begin / End for a window that shows
+        // information (a counter, a list, this demo). The host then:
+        //   * draws a gear button (in the title bar; top-right corner on hover for a
+        //     title-less window) with Lock window, Game overlay mode, Reset position
+        //     and Close (Close only when an `open` flag is passed);
+        //   * remembers the window's position (in game and out of game separately),
+        //     size and collapsed state in its own file, keyed by plugin id + o.id;
+        //   * with Game overlay mode off, draws the window outside the game, anywhere
+        //     on the screens, in another ImGui context it binds this plugin to while
+        //     the window is open.
+        // So: never SetNextWindowPos / Collapsed (nor Size, unless the window is
+        // AlwaysAutoResize / NoResize) for it; push window-level style and call
+        // SetNextWindowBgAlpha / SetNextWindowSizeConstraints before it and pop only
+        // after it ended; inside it draw only into the window (no
+        // GetForegroundDrawList: the UI Explorer's on-game highlights are drawn after
+        // the window, below); after Close save the flag like any setting. On an older
+        // host it is a plain ImGui window at legacyPos / defaultPos.
+        PluginSDK::InfoWindowOptions o;
+        o.id = "main";                            // stable, 1-48 of [A-Za-z0-9_.-]
+        o.title = "Example Plugin v6";
+        o.flags = 0;                              // resizable: the host keeps its size
+        o.defaultPos = ImVec2(60.0f, 60.0f);
+        o.defaultSize = ImVec2(480.0f, 420.0f);
+
         ImGui::SetNextWindowSizeConstraints(ImVec2(400, 300), ImVec2(FLT_MAX, FLT_MAX));
         ImGui::SetNextWindowBgAlpha(m_WindowAlpha);
+        {
+            PluginSDK::InfoWindow window(ctx()->Overlay, o, &m_ShowWindow);   // Close clears m_ShowWindow
+            if (window) DrawWindowContents(snapshot);
+        }   // the window ends here
+        if (!m_ShowWindow) SaveSettings();       // closed from its title-bar X or gear menu
+        m_UiExplorer.DrawHighlights();           // over the game, now that the window ended
+    }
 
-        if (!ImGui::Begin("Example Plugin v6##ExamplePlugin", &m_ShowWindow)) {
-            ImGui::End();
-            return;
-        }
-
+    // The info window's contents (the window is open; see DrawUI).
+    void DrawWindowContents(const PluginSDK::Snapshot& snapshot) {
         if (!snapshot.IsAttached) {
             ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Game not attached");
-            ImGui::End();
             return;
         }
 
@@ -191,7 +223,6 @@ public:
         if (!inGame) {
             ImGui::TextColored(ImVec4(1, 1, 0, 1), "Not in game (state: %d)",
                 static_cast<int>(snapshot.State));
-            ImGui::End();
             return;
         }
 
@@ -274,8 +305,6 @@ public:
 
             ImGui::EndTabBar();
         }
-
-        ImGui::End();
     }
 
     bool WantsOverlay() const override { return m_WantsOverlay; }
@@ -307,6 +336,19 @@ public:
     }
 
 private:
+    // Bind this DLL's own ImGui copy to the host's context at EVERY entry point
+    // that draws (OnEnable, DrawSettings, DrawUI). With Settings -> "Separate menu
+    // window" DrawSettings runs in the menu window's context and DrawUI in the
+    // in-game overlay's: two contexts, each with its own frame count, time,
+    // display size and windows. The host hands over the right one before each
+    // call (ctx()->ImGuiContext); never compare ImGui::GetFrameCount(), ImGui
+    // ids or windows between DrawSettings and DrawUI, and take the game's size
+    // from ctx()->Game.GetScreenSize(), not io.DisplaySize, in DrawSettings.
+    void BindImGui() const {
+        if (ctx()->ImGuiContext)
+            ImGui::SetCurrentContext(static_cast<ImGuiContext*>(ctx()->ImGuiContext));
+    }
+
     void DrawAreaAndVitals(const PluginSDK::Snapshot& snapshot) {
         if (ImGui::CollapsingHeader("Area Info", ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Text("Area: %s", snapshot.CurrentAreaName.c_str());
@@ -505,6 +547,6 @@ extern "C" PLUGIN_API void DestroyPlugin(PluginSDK::Plugin* plugin) {
 POEFIXER_PLUGIN_INFO(
     "ExamplePlugin",
     "Example Plugin",
-    "1.0.2",
+    "1.0.3",
     "POEFixer",
     "Reference plugin for developers: live demos of every SDK service, from entities, buffs and inventories to the game UI tree, memory and prices.")
