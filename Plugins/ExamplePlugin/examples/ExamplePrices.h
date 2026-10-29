@@ -20,6 +20,7 @@
 
 #include "../../../POEFixer/plugin_sdk/PluginSDK.h"
 #include "../../../POEFixer/imgui/imgui.h"
+#include "Text.h"
 #include <vector>
 #include <string>
 #include <utility>
@@ -27,10 +28,11 @@
 
 namespace Examples {
 
-// Render one PriceResult inline: chaos | divine | exalt [category].
+// Render one PriceResult inline: chaos | divine | exalt [category]. The currency
+// abbreviations (c, div, ex) and the category are kept as the price source spells them.
 inline void DrawPriceResultRow(const PluginSDK::PriceResult& p) {
     if (!p.found) {
-        ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.60f, 1), "not found");
+        ImGui::TextColored(ImVec4(0.60f, 0.60f, 0.60f, 1), "%s", I18n::Tr("prices_not_found"));
         return;
     }
     ImGui::Text("%.1fc", p.chaos);
@@ -56,33 +58,40 @@ inline void DrawPricesPanel(const PluginSDK::Context* ctx) {
     // Always gate on GetStatus().loaded before trusting prices: the host loads
     // them on a background thread, so they may not be ready on the first frame.
     PluginSDK::PriceStatus st = ctx->Prices.GetStatus();
-    ImGui::TextColored(cHead, "PriceService status");
+    ImGui::TextColored(cHead, "%s", I18n::Tr("prices_status"));
     if (st.loaded) {
-        ImGui::TextColored(cGood, "loaded");
+        ImGui::TextColored(cGood, "%s", I18n::Tr("prices_loaded"));
         ImGui::SameLine();
-        ImGui::Text("- %d items", st.totalItems);
+        Show(I18n::TrF("prices_item_count", { { "count", Num("%d", st.totalItems) } }));
     } else {
-        ImGui::TextColored(cWarn, "loading prices...");
+        ImGui::TextColored(cWarn, "%s", I18n::Tr("prices_loading"));
     }
-    ImGui::Text("categories: %d ok / %d pending / %d failed",
-                st.catsOk, st.catsPending, st.catsFailed);
+    Show(I18n::TrF("prices_categories", { { "ok", Num("%d", st.catsOk) },
+                                          { "pending", Num("%d", st.catsPending) },
+                                          { "failed", Num("%d", st.catsFailed) } }));
 
     // ---- Conversion rates ------------------------------------------------
     PluginSDK::PriceRates rates = ctx->Prices.GetRates();
-    ImGui::Text("1 Divine = %.0fc   |   1 Exalted = %.1fc",
-                rates.divineInChaos, rates.exaltedInChaos);
+    // Two rates on one line: the separator and its gaps are code (SameLine), not part of a text.
+    Show(I18n::TrF("prices_rate_divine", { { "divine", Num("%.0f", rates.divineInChaos) } }));
+    ImGui::SameLine(0.0f, ImGui::GetFontSize());
+    ImGui::TextDisabled("|");
+    ImGui::SameLine(0.0f, ImGui::GetFontSize());
+    Show(I18n::TrF("prices_rate_exalted", { { "exalted", Num("%.1f", rates.exaltedInChaos) } }));
 
     ImGui::Separator();
 
     // ---- Interactive lookup ----------------------------------------------
-    ImGui::TextColored(cHead, "Look up a price by name");
+    // The query is a name as the price source knows it (English), so its default
+    // and the presets below stay English.
+    ImGui::TextColored(cHead, "%s", I18n::Tr("prices_lookup_title"));
     static char query[128] = "Divine Orb";
     bool submitted = ImGui::InputText("##exPriceQuery", query, sizeof(query),
                                       ImGuiInputTextFlags_EnterReturnsTrue);
     ImGui::SameLine();
-    submitted |= ImGui::Button("Look up");
+    submitted |= ImGui::Button(I18n::TrId("prices_lookup"));
     ImGui::SameLine();
-    ImGui::TextDisabled("(currency, unique, or base name)");
+    ImGui::TextDisabled("%s", I18n::Tr("prices_lookup_hint"));
 
     static PluginSDK::PriceResult lastResult;
     static std::string            lastQuery;
@@ -99,15 +108,15 @@ inline void DrawPricesPanel(const PluginSDK::Context* ctx) {
     ImGui::Separator();
 
     // ---- Common currency (looked up live each frame; cheap) --------------
-    ImGui::TextColored(cHead, "Common currency");
+    ImGui::TextColored(cHead, "%s", I18n::Tr("prices_common_currency"));
     static const char* kPresets[] = {
         "Divine Orb", "Exalted Orb", "Chaos Orb",
         "Orb of Annulment", "Mirror of Kalandra", "Vaal Orb",
     };
     if (ImGui::BeginTable("##exPrices", 2,
             ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
-        ImGui::TableSetupColumn("Item", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Price");
+        ImGui::TableSetupColumn(I18n::TrId("prices_col_item"), ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn(I18n::TrId("prices_col_price"));
         ImGui::TableHeadersRow();
         for (const char* name : kPresets) {
             PluginSDK::PriceResult p = ctx->Prices.LookupPrice(name);
@@ -125,11 +134,11 @@ inline void DrawPricesPanel(const PluginSDK::Context* ctx) {
     // inventory, price each item by its unique-or-base name, sum in chaos.
     // Triggered by a button so the per-item LookupPrice loop runs once, not
     // every frame.
-    ImGui::TextColored(cHead, "Value my backpack");
+    ImGui::TextColored(cHead, "%s", I18n::Tr("prices_value_backpack"));
     static std::vector<std::pair<std::string, float>> invPriced;  // name -> chaos
     static float invTotalChaos = 0.f;
     static bool  invScanned    = false;
-    if (ImGui::Button("Scan & price inventory")) {
+    if (ImGui::Button(I18n::TrId("prices_scan_inventory"))) {
         ctx->Inventory.Scan(0);          // 0 = backpack
         invPriced.clear();
         invTotalChaos = 0.f;
@@ -149,14 +158,15 @@ inline void DrawPricesPanel(const PluginSDK::Context* ctx) {
     if (invScanned) {
         ImGui::SameLine();
         float div = rates.divineInChaos > 0 ? invTotalChaos / rates.divineInChaos : 0.f;
-        ImGui::Text("total: %.1fc (%.2f div)", invTotalChaos, div);
+        Show(I18n::TrF("prices_total", { { "chaos", Num("%.1f", invTotalChaos) },
+                                         { "divine", Num("%.2f", div) } }));
         if (invPriced.empty()) {
-            ImGui::TextColored(cDim, "(no priced items found in backpack)");
+            ImGui::TextColored(cDim, "%s", I18n::Tr("prices_no_priced_items"));
         } else if (ImGui::BeginTable("##exInvPrices", 2,
                 ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
                 ImVec2(0, 160))) {
-            ImGui::TableSetupColumn("Item", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Chaos");
+            ImGui::TableSetupColumn(I18n::TrId("prices_col_item"), ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn(I18n::TrId("prices_col_chaos"));
             ImGui::TableHeadersRow();
             for (const auto& row : invPriced) {
                 ImGui::TableNextRow();

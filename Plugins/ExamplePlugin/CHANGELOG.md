@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4
+
+- Follows the program language (ten languages).
+- Columns and fields size themselves to the translated text instead of pixel widths made for English, and long translated labels keep every switch, tab and section working.
+- Entity types are shown by their SDK names, the same names as in the type filter.
+- Game terms read as the game names them in each language (for example the Magic rarity and implicit modifiers in Russian, the skill names in the Skills tab).
+
 ## 1.0.3
 
 - Works with the separate menu window (POEFixer 366): the host hands the plugin the right drawing context for its settings tab and for its overlay.

@@ -12,6 +12,7 @@
 
 #include "../../../POEFixer/plugin_sdk/PluginSDK.h"
 #include "../../../POEFixer/imgui/imgui.h"
+#include "Text.h"
 
 namespace Examples {
 
@@ -20,34 +21,37 @@ inline void DrawBuffsPanel(const PluginSDK::Context* ctx,
     if (!ctx) return;
 
     if (!snapshot.Player.Components.HasBuffs()) {
-        ImGui::TextDisabled("Player has no Buffs component");
+        ImGui::TextDisabled("%s", I18n::Tr("buffs_no_component"));
         return;
     }
 
     std::vector<PluginSDK::Buff> buffs =
         ctx->Components.EnumerateAggregatedBuffs(snapshot.Player.Components.Buffs);
 
-    ImGui::Text("Active Buffs: %d", static_cast<int>(buffs.size()));
+    Show(I18n::TrF("buffs_active", { { "count", Num("%d", static_cast<int>(buffs.size())) } }));
 
     if (buffs.empty()) {
-        ImGui::TextDisabled("No active buffs");
+        ImGui::TextDisabled("%s", I18n::Tr("buffs_none"));
         return;
     }
 
     static char buffFilter[64] = "";
-    ImGui::InputText("Filter##buffFilter", buffFilter, sizeof(buffFilter));
+    ImGui::InputText(I18n::TrId("buffs_filter"), buffFilter, sizeof(buffFilter));
 
     if (ImGui::BeginTable("BuffTable", 6,
         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
         ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_ScrollY |
-        ImGuiTableFlags_Sortable | ImGuiTableFlags_Resizable,
+        ImGuiTableFlags_Sortable,
         ImVec2(0, 250))) {
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn("Time Left", ImGuiTableColumnFlags_WidthFixed, 80);
-        ImGui::TableSetupColumn("Total Time", ImGuiTableColumnFlags_WidthFixed, 80);
-        ImGui::TableSetupColumn("Charges", ImGuiTableColumnFlags_WidthFixed, 60);
-        ImGui::TableSetupColumn("Source Entity Id", ImGuiTableColumnFlags_WidthFixed, 110);
-        ImGui::TableSetupColumn("Progress", ImGuiTableColumnFlags_WidthFixed, 100);
+        // No pixel widths: a width sized for the English header clips a translated one. A fixed
+        // column with width 0 in a table without ImGuiTableFlags_Resizable fits its header and its
+        // cells every frame, so it follows a language switch too. TrId keeps each column's id.
+        ImGui::TableSetupColumn(I18n::TrId("common_name"), ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn(I18n::TrId("buffs_time_left"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+        ImGui::TableSetupColumn(I18n::TrId("buffs_total_time"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+        ImGui::TableSetupColumn(I18n::TrId("common_charges"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+        ImGui::TableSetupColumn(I18n::TrId("buffs_source_entity"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+        ImGui::TableSetupColumn(I18n::TrId("buffs_progress"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
         ImGui::TableHeadersRow();
 
         for (const auto& b : buffs) {
@@ -70,13 +74,13 @@ inline void DrawBuffsPanel(const PluginSDK::Context* ctx,
 
             ImGui::TableNextColumn();
             if (b.TimeLeft > 0)
-                ImGui::Text("%.1fs", b.TimeLeft);
+                Show(I18n::TrF("common_seconds", { { "value", Num("%.1f", b.TimeLeft) } }));
             else
-                ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Permanent");
+                ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "%s", I18n::Tr("buffs_permanent"));
 
             ImGui::TableNextColumn();
             if (b.TotalTime > 0)
-                ImGui::Text("%.1fs", b.TotalTime);
+                Show(I18n::TrF("common_seconds", { { "value", Num("%.1f", b.TotalTime) } }));
             else
                 ImGui::TextDisabled("--");
 
@@ -99,7 +103,8 @@ inline void DrawBuffsPanel(const PluginSDK::Context* ctx,
                     : (frac > 0.2f) ? ImVec4(0.8f, 0.8f, 0.3f, 1.0f)
                     : ImVec4(0.8f, 0.3f, 0.3f, 1.0f);
                 ImGui::PushStyleColor(ImGuiCol_PlotHistogram, barColor);
-                ImGui::ProgressBar(frac, ImVec2(-1, 14), "");
+                // A bar of its own width (6 em): the column fits it or its header, whichever is wider.
+                ImGui::ProgressBar(frac, ImVec2(ImGui::GetFontSize() * 6.0f, ImGui::GetTextLineHeight()), "");
                 ImGui::PopStyleColor();
             } else {
                 ImGui::TextDisabled("--");

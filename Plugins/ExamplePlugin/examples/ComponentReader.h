@@ -10,6 +10,7 @@
 #include "../../../POEFixer/plugin_sdk/PluginSDK.h"
 #include "../../../POEFixer/imgui/imgui.h"
 #include "SdkStatus.h"
+#include "Text.h"
 #include <algorithm>
 #include <string>
 
@@ -19,14 +20,14 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
                                     const PluginSDK::Snapshot& snapshot) {
     if (!ctx) return;
     if (snapshot.State != PluginSDK::GameState::InGame) {
-        ImGui::TextDisabled("Not in game");
+        ImGui::TextDisabled("%s", I18n::Tr("common_not_in_game"));
         return;
     }
 
-    ImGui::Text("SDK v6 Component Reader Demo");
+    ImGui::TextUnformatted(I18n::Tr("components_title"));
     ImGui::Separator();
 
-    if (ImGui::CollapsingHeader("Nearby Entity Health")) {
+    if (ImGui::CollapsingHeader(I18n::TrId("components_entity_health"))) {
         int shown = 0;
         for (const auto& entity : snapshot.Entities) {
             if (!entity.Components.HasLife()) continue;
@@ -35,19 +36,22 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
             if (!life.Valid) continue;
 
             float hpPct = ctx->Components.GetHealthPercent(entity.Components.Life);
-            ImGui::Text("Entity %u: HP %d/%d (%.0f%%)",
-                entity.Id, life.Health.Current, life.Health.Total, hpPct);
+            Show(I18n::TrF("components_entity_hp", { { "id", Num("%u", entity.Id) },
+                                                     { "current", Num("%d", life.Health.Current) },
+                                                     { "max", Num("%d", life.Health.Total) },
+                                                     { "percent", Num("%.0f", hpPct) } }));
 
             if (++shown >= 20) {
-                ImGui::TextDisabled("... (%d more with Life)",
-                    static_cast<int>(snapshot.Entities.size()) - shown);
+                ImGui::TextDisabled("%s", I18n::TrF("components_more_with",
+                    { { "count", Num("%d", static_cast<int>(snapshot.Entities.size()) - shown) },
+                      { "component", "Life" } }).c_str());
                 break;
             }
         }
-        if (shown == 0) ImGui::TextDisabled("No entities with Life component nearby");
+        if (shown == 0) ImGui::TextDisabled("%s", I18n::Tr("components_no_life"));
     }
 
-    if (ImGui::CollapsingHeader("Entity Positions")) {
+    if (ImGui::CollapsingHeader(I18n::TrId("components_entity_positions"))) {
         int shown = 0;
         for (const auto& entity : snapshot.Entities) {
             if (!entity.Components.HasRender()) continue;
@@ -55,19 +59,22 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
             auto render = ctx->Components.ReadRender(entity.Components.Render);
             if (!render.Valid) continue;
 
-            ImGui::Text("Entity %u: World(%.1f, %.1f, %.1f)",
-                entity.Id, render.WorldX, render.WorldY, render.WorldZ);
+            Show(I18n::TrF("components_entity_world", { { "id", Num("%u", entity.Id) },
+                                                        { "x", Num("%.1f", render.WorldX) },
+                                                        { "y", Num("%.1f", render.WorldY) },
+                                                        { "z", Num("%.1f", render.WorldZ) } }));
 
             if (++shown >= 20) {
-                ImGui::TextDisabled("... (%d more with Render)",
-                    static_cast<int>(snapshot.Entities.size()) - shown);
+                ImGui::TextDisabled("%s", I18n::TrF("components_more_with",
+                    { { "count", Num("%d", static_cast<int>(snapshot.Entities.size()) - shown) },
+                      { "component", "Render" } }).c_str());
                 break;
             }
         }
-        if (shown == 0) ImGui::TextDisabled("No entities with Render component nearby");
+        if (shown == 0) ImGui::TextDisabled("%s", I18n::Tr("components_no_render"));
     }
 
-    if (ImGui::CollapsingHeader("Items on Ground")) {
+    if (ImGui::CollapsingHeader(I18n::TrId("components_ground_items"))) {
         // Ground items are WorldItem container entities. The inner item
         // entity (with Mods/Base/Stack/Sockets components) is reached via
         // ctx->Entities.GetWorldItemInner(containerAddr).
@@ -80,9 +87,10 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
             auto inner = ctx->Entities.GetWorldItemInner(e.Address);
             if (inner && inner->Components.HasMods()) ++withMods;
         }
-        ImGui::Text("WorldItems: %d total | %d with Mods", total, withMods);
+        Show(I18n::TrF("components_world_items", { { "total", Num("%d", total) },
+                                                   { "mods", Num("%d", withMods) } }));
         if (total == 0) {
-            ImGui::TextDisabled("Walk near a dropped item to see it here.");
+            ImGui::TextDisabled("%s", I18n::Tr("components_walk_near_item"));
         } else {
             ImGui::Separator();
             int shown = 0;
@@ -91,7 +99,9 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
 
                 auto inner = ctx->Entities.GetWorldItemInner(entity.Address);
                 if (!inner) {
-                    ImGui::TextDisabled("id=%u  (inner not yet resolved)", entity.Id);
+                    ImGui::TextDisabled("id=%u", entity.Id);   // a field dump (code), then the note (a text)
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("%s", I18n::Tr("components_inner_unresolved"));
                     if (++shown >= 20) break;
                     continue;
                 }
@@ -134,7 +144,8 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
                 }
 
                 // Item names — both auto-resolve WorldItem containers (Task 4),
-                // so passing the container address directly works.
+                // so passing the container address directly works. They are the
+                // game's own names: shown as the game gives them.
                 std::string baseTypeName = ctx->Inventory.ReadItemBaseTypeName(entity.Address);
                 std::string uniqueName   = ctx->Inventory.ReadItemUniqueName(entity.Address);
 
@@ -157,7 +168,7 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
                     ImGui::TextUnformatted(shortPath.c_str());
                 }
                 ImGui::PopStyleColor();
-                // Line 2: indented diagnostic row (uncoloured).
+                // Line 2: indented diagnostic row (uncoloured): a field dump, as in code.
                 ImGui::TextDisabled(
                     "    id=%u  iLvl=%d  rarity=%d  ident=%s  corr=%s  +%d/%dM",
                     entity.Id, itemLevel, rarity,
@@ -166,14 +177,15 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
                     implicitCount, explicitCount);
 
                 if (++shown >= 20) {
-                    ImGui::TextDisabled("... %d more items", total - shown);
+                    ImGui::TextDisabled("%s",
+                        I18n::TrF("components_more_items", { { "count", Num("%d", total - shown) } }).c_str());
                     break;
                 }
             }
         }
     }
 
-    if (ImGui::CollapsingHeader("Ground Effects")) {
+    if (ImGui::CollapsingHeader(I18n::TrId("components_ground_effects"))) {
         // GroundEffect lives on VisibleServerGroundEffect entities, which all
         // share the same metadata path — TypeId is what tells the variants apart
         // (ShockedGround / IgnitedGround / CausticCloud / ChilledGround / ...).
@@ -191,9 +203,11 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
             auto ge = ctx->Components.ReadGroundEffect(entity.Address);
             if (!ge.Valid) continue;
 
-            ImGui::Text("Entity %u: %s  (radius %.0f)",
-                entity.Id, ge.TypeId.empty() ? "(unknown)" : ge.TypeId.c_str(),
-                ge.Radius);
+            Show(I18n::TrF("components_ground_effect", {
+                { "id", Num("%u", entity.Id) },
+                { "type", ge.TypeId.empty() ? std::string_view(I18n::Tr("components_type_unknown")) : std::string_view(ge.TypeId) } }));
+            ImGui::SameLine();
+            Show(I18n::TrF("components_ground_effect_radius", { { "radius", Num("%.0f", ge.Radius) } }));
             if (!ge.BuffVisual1.empty() || !ge.AoFile.empty() || !ge.EndEffect.empty()) {
                 ImGui::TextDisabled("    visual=%s  ao=%s  end=%s",
                     ge.BuffVisual1.empty() ? "-" : ge.BuffVisual1.c_str(),
@@ -202,20 +216,20 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
             }
 
             if (++shown >= 20) {
-                ImGui::TextDisabled("... more ground effects nearby");
+                ImGui::TextDisabled("%s", I18n::Tr("components_more_ground_effects"));
                 break;
             }
         }
         if (shown == 0)
-            ImGui::TextDisabled("No ground effects nearby "
-                                "(stand near caustic / ignited / shocked ground to see them)");
+            ImGui::TextDisabled("%s", I18n::Tr("components_no_ground_effects"));
     }
 
-    if (ImGui::CollapsingHeader("UI Navigation Demo")) {
+    if (ImGui::CollapsingHeader(I18n::TrId("components_ui_navigation"))) {
         uintptr_t gameUi = ctx->Ui.GetGameUiRoot();
         if (gameUi != 0) {
             auto children = ctx->Ui.GetChildren(gameUi);
-            ImGui::Text("GameUI root has %d children", static_cast<int>(children.size()));
+            Show(I18n::TrF("components_ui_root_children",
+                           { { "count", Num("%d", static_cast<int>(children.size())) } }));
 
             int limit = (static_cast<int>(children.size()) < 10) ? static_cast<int>(children.size()) : 10;
             for (int i = 0; i < limit; i++) {
@@ -223,21 +237,24 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
                 if (!elem.Valid) continue;
                 std::string sid = ctx->Ui.GetStringId(children[i]);
 
+                // A field dump, as in code.
                 ImGui::Text("  [%d] Type=0x%04X Visible=%s StringId=\"%s\"",
                     i, elem.ElementType,
                     elem.IsVisible ? "yes" : "no",
                     sid.c_str());
             }
             if (static_cast<int>(children.size()) > 10) {
-                ImGui::TextDisabled("  ... %d more children",
-                    static_cast<int>(children.size()) - 10);
+                ImGui::Indent();   // under the list: the indent is code, never spaces in the value
+                ImGui::TextDisabled("%s", I18n::TrF("components_more_children",
+                    { { "count", Num("%d", static_cast<int>(children.size()) - 10) } }).c_str());
+                ImGui::Unindent();
             }
         } else {
-            ImGui::TextDisabled("GameUI root not available (not in game?)");
+            ImGui::TextDisabled("%s", I18n::Tr("components_ui_root_missing"));
         }
     }
 
-    if (ImGui::CollapsingHeader("All Component Readers (per-method)")) {
+    if (ImGui::CollapsingHeader(I18n::TrId("components_all_readers"))) {
         const auto& player = snapshot.Player;
 
         auto reportComponent = [&ctx](const char* name, uintptr_t addr,
@@ -245,15 +262,15 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
                                                          uintptr_t)) {
             if (addr == 0) {
                 Examples::StatusBadge(Examples::StatusLevel::Warn,
-                    (std::string(name) + " - address not set on player").c_str());
+                    I18n::TrF("components_reader_unset", { { "component", name } }).c_str());
                 return;
             }
             if (tryRead(ctx, addr))
                 Examples::StatusBadge(Examples::StatusLevel::Ok,
-                    (std::string(name) + " - Valid").c_str());
+                    I18n::TrF("components_reader_valid", { { "component", name } }).c_str());
             else
                 Examples::StatusBadge(Examples::StatusLevel::Fail,
-                    (std::string(name) + " - Read returned invalid").c_str());
+                    I18n::TrF("components_reader_invalid", { { "component", name } }).c_str());
         };
 
         reportComponent("Life",        player.Components.Life,
@@ -300,67 +317,78 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
             [](const PluginSDK::Context* c, uintptr_t a){ return c->Components.ReadDiesAfterTime(a).Valid; });
     }
 
-    if (ImGui::CollapsingHeader("Enumerators")) {
+    if (ImGui::CollapsingHeader(I18n::TrId("components_enumerators"))) {
         const auto& player = snapshot.Player;
 
         if (player.Components.HasBuffs()) {
             auto buffs = ctx->Components.EnumerateBuffs(player.Components.Buffs);
-            ImGui::Text("EnumerateBuffs: %zu buffs", buffs.size());
-            Examples::StatusBadge(Examples::StatusLevel::Ok, "EnumerateBuffs returned");
+            Show(I18n::TrF("components_enum_buffs", { { "count", Num("%zu", buffs.size()) } }));
+            Examples::StatusBadge(Examples::StatusLevel::Ok,
+                I18n::TrF("components_enum_returned", { { "function", "EnumerateBuffs" } }).c_str());
         } else {
-            Examples::StatusBadge(Examples::StatusLevel::Warn, "Buffs component address is 0");
+            Examples::StatusBadge(Examples::StatusLevel::Warn,
+                I18n::TrF("components_address_zero", { { "component", "Buffs" } }).c_str());
         }
 
         if (player.Components.HasActor()) {
             auto skills = ctx->Components.EnumerateActiveSkills(player.Components.Actor);
-            ImGui::Text("EnumerateActiveSkills: %zu skills", skills.size());
-            Examples::StatusBadge(Examples::StatusLevel::Ok, "EnumerateActiveSkills returned");
+            Show(I18n::TrF("components_enum_skills", { { "count", Num("%zu", skills.size()) } }));
+            Examples::StatusBadge(Examples::StatusLevel::Ok,
+                I18n::TrF("components_enum_returned", { { "function", "EnumerateActiveSkills" } }).c_str());
         } else {
-            Examples::StatusBadge(Examples::StatusLevel::Warn, "Actor component address is 0");
+            Examples::StatusBadge(Examples::StatusLevel::Warn,
+                I18n::TrF("components_address_zero", { { "component", "Actor" } }).c_str());
         }
 
         if (player.Components.HasStats()) {
             auto stats = ctx->Components.EnumerateStats(player.Components.Stats);
-            ImGui::Text("EnumerateStats: %zu stats", stats.size());
-            Examples::StatusBadge(Examples::StatusLevel::Ok, "EnumerateStats returned");
+            Show(I18n::TrF("components_enum_stats", { { "count", Num("%zu", stats.size()) } }));
+            Examples::StatusBadge(Examples::StatusLevel::Ok,
+                I18n::TrF("components_enum_returned", { { "function", "EnumerateStats" } }).c_str());
         } else {
-            Examples::StatusBadge(Examples::StatusLevel::Warn, "Stats component address is 0");
+            Examples::StatusBadge(Examples::StatusLevel::Warn,
+                I18n::TrF("components_address_zero", { { "component", "Stats" } }).c_str());
         }
 
         // Item mods enumeration requires an item entity; skipped here unless a
         // nearby item has Mods. The Item Mods (Nearby Items) header above covers it.
-        ImGui::TextDisabled("EnumerateItemMods: see 'Item Mods (Nearby Items)' header");
+        ImGui::TextDisabled("%s", I18n::Tr("components_enum_item_mods"));
 
         // Monster mods live on monster entities (ObjectMagicProperties / OMP),
         // not the player. See the per-entity "Monster Mods" node in the Entities
         // tab for a live ctx->Components.EnumerateMonsterMods(OMP) demo.
-        ImGui::TextDisabled("EnumerateMonsterMods: see Entities tab -> 'Monster Mods'");
+        ImGui::TextDisabled("%s", I18n::Tr("components_enum_monster_mods"));
     }
 
-    if (ImGui::CollapsingHeader("Convenience Helpers")) {
+    if (ImGui::CollapsingHeader(I18n::TrId("components_helpers"))) {
         const auto& player = snapshot.Player;
         if (player.Components.HasLife()) {
-            ImGui::Text("Player alive: %s",
-                ctx->Components.IsAlive(player.Components.Life) ? "yes" : "no");
-            ImGui::Text("HP: %.1f%%", ctx->Components.GetHealthPercent(player.Components.Life));
-            ImGui::Text("ES: %.1f%%", ctx->Components.GetEsPercent(player.Components.Life));
-            ImGui::Text("MP: %.1f%%", ctx->Components.GetManaPercent(player.Components.Life));
+            Show(I18n::TrF("components_player_alive",
+                           { { "value", YesNo(ctx->Components.IsAlive(player.Components.Life)) } }));
+            Show(I18n::TrF("components_hp_percent",
+                           { { "percent", Num("%.1f", ctx->Components.GetHealthPercent(player.Components.Life)) } }));
+            Show(I18n::TrF("components_es_percent",
+                           { { "percent", Num("%.1f", ctx->Components.GetEsPercent(player.Components.Life)) } }));
+            Show(I18n::TrF("components_mp_percent",
+                           { { "percent", Num("%.1f", ctx->Components.GetManaPercent(player.Components.Life)) } }));
         } else {
-            ImGui::TextDisabled("Player Life component not available");
+            ImGui::TextDisabled("%s", I18n::Tr("components_no_player_life"));
         }
         if (player.Components.HasPlayer()) {
-            ImGui::Text("Name: %s",
-                ctx->Components.GetPlayerName(player.Components.Player).c_str());
+            Show(I18n::TrF("components_player_name",
+                           { { "name", ctx->Components.GetPlayerName(player.Components.Player) } }));
         }
         if (player.Components.HasRender()) {
             float wx, wy, wz;
             if (ctx->Components.GetWorldPosition(player.Components.Render, wx, wy, wz)) {
-                ImGui::Text("Position: (%.1f, %.1f, %.1f)", wx, wy, wz);
+                Show(I18n::TrF("components_position", { { "x", Num("%.1f", wx) },
+                                                        { "y", Num("%.1f", wy) },
+                                                        { "z", Num("%.1f", wz) } }));
             }
         }
         if (player.Components.HasChest()) {
-            ImGui::Text("Chest opened: %s",
-                ctx->Components.IsChestOpened(player.Components.Chest) ? "yes" : "no");
+            Show(I18n::TrF("components_chest_opened",
+                           { { "value", YesNo(ctx->Components.IsChestOpened(player.Components.Chest)) } }));
         }
 
         // Item helpers - only meaningful for items, not the player. Demonstrated
@@ -369,17 +397,23 @@ inline void ShowComponentReaderDemo(const PluginSDK::Context* ctx,
             if (!entity.Components.HasMods()) continue;
             if (!entity.Components.HasStack() && !entity.Components.HasBase()) continue;
             ImGui::Separator();
-            ImGui::Text("Helpers for item entity %u:", entity.Id);
+            Show(I18n::TrF("components_item_helpers", { { "id", Num("%u", entity.Id) } }));
             if (entity.Components.HasMods()) {
                 int rarity = ctx->Components.GetItemRarity(entity.Components.Mods);
                 bool ident = ctx->Components.IsItemIdentified(entity.Components.Mods);
-                ImGui::Text("  Rarity=%d  Identified=%s", rarity, ident ? "yes" : "no");
+                ImGui::Indent();
+                Show(I18n::TrF("components_item_rarity", { { "rarity", Num("%d", rarity) } }));
+                ImGui::SameLine(0.0f, ImGui::GetFontSize());
+                Show(I18n::TrF("components_item_identified", { { "identified", YesNo(ident) } }));
+                ImGui::Unindent();
                 Examples::StatusBadge(Examples::StatusLevel::Ok,
                     "GetItemRarity + IsItemIdentified");
             }
             if (entity.Components.HasStack()) {
                 int stack = ctx->Components.GetStackCount(entity.Components.Stack);
-                ImGui::Text("  Stack=%d", stack);
+                ImGui::Indent();
+                Show(I18n::TrF("components_item_stack", { { "count", Num("%d", stack) } }));
+                ImGui::Unindent();
                 Examples::StatusBadge(Examples::StatusLevel::Ok, "GetStackCount");
             }
             break;  // first matching item is enough

@@ -5,17 +5,18 @@
 #include "../../../POEFixer/plugin_sdk/PluginSDK.h"
 #include "../../../POEFixer/imgui/imgui.h"
 #include "SdkStatus.h"
+#include "Text.h"
 
 namespace Examples {
 
+// The buttons name LogService calls and the log lines stay English (SDK names, log).
 inline void DrawLogPanel(const PluginSDK::Context* ctx, int& sentCount) {
-    if (!ctx) { StatusBadge(StatusLevel::Fail, "Context missing"); return; }
+    if (!ctx) { StatusBadge(StatusLevel::Fail, I18n::Tr("common_context_missing")); return; }
 
-    StatusBadge(StatusLevel::Ok, "LogService always available");
+    StatusBadge(StatusLevel::Ok, I18n::Tr("log_always_available"));
     ImGui::Separator();
 
-    ImGui::TextWrapped("Click a button to fire a log entry. Check the host's "
-        "Logs tab (or the console / log file) to verify the message appears.");
+    ImGui::TextWrapped("%s", I18n::Tr("log_intro"));
     ImGui::Spacing();
 
     if (ImGui::Button("Log.Debug")) {
@@ -45,7 +46,7 @@ inline void DrawLogPanel(const PluginSDK::Context* ctx, int& sentCount) {
     }
 
     ImGui::Spacing();
-    ImGui::Text("Total messages fired this session: %d", sentCount);
+    Show(I18n::TrF("log_total_fired", { { "count", Num("%d", sentCount) } }));
 }
 
 } // namespace Examples

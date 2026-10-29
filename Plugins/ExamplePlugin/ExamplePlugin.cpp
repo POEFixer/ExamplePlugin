@@ -15,14 +15,18 @@
 //   - Overlay mode support
 //   - The info window as a host informational window (PluginInfoWindow.h):
 //     gear menu, in / out of game, remembered place (see DrawUI)
+//   - Texts in the program language (PluginI18n.h): lang/<code>.json next to
+//     the DLL, English compiled in (lang_en.generated.h); how: examples/Text.h
 // ============================================================================
 
 #include "../../POEFixer/plugin_sdk/PluginSDK.h"
+#include "lang_en.generated.h"   // the embedded English: once per DLL, after PluginSDK.h
 #include "../../POEFixer/imgui/imgui.h"
 #include "../../POEFixer/imgui/IconsFontAwesome6.h"
 #include "../../POEFixer/plugin_sdk/PluginUi.h"
 #include "../../POEFixer/plugin_sdk/PluginInfoWindow.h"   // informational windows (see DrawUI)
 
+#include "examples/Text.h"
 #include "examples/ExampleBuffs.h"
 #include "examples/ExampleEntities.h"
 #include "examples/ExampleInventory.h"
@@ -44,6 +48,10 @@
 #include <chrono>
 #include <cfloat>
 #include <algorithm>
+
+namespace I18n = PluginSDK::I18n;
+using Examples::Num;
+using Examples::Show;
 
 class ExamplePlugin : public PluginSDK::Plugin {
 public:
@@ -76,52 +84,49 @@ public:
         bool changed = false;
 
         // --- Window ----------------------------------------------------------
+        // Every text is a key of lang/en.json (see examples/Text.h). Check() keeps its
+        // own ImGui id ("###showWindow"), so only the label is translated.
         BeginCard("##exampleWindow");
-        Heading(ICON_FA_WINDOW_MAXIMIZE, "Info window");
-        changed |= Check("Show the info window", "showWindow", &m_ShowWindow,
-                         "Opens the Example Plugin window with one tab per demo.\n"
-                         "Its gear menu locks it, takes it out of the game onto any\n"
-                         "screen or resets its position. Closing the window (its X or\n"
-                         "the gear menu) turns this off.");
+        Heading(ICON_FA_WINDOW_MAXIMIZE, I18n::Tr("settings_info_window"));
+        changed |= Check(I18n::Tr("settings_show_window"), "showWindow", &m_ShowWindow,
+                         I18n::Tr("settings_show_window_tip"));
         ImGui::SameLine();
-        StatusPill(HostCompatible() ? "Host SDK v6" : "Host too old",
+        StatusPill(HostCompatible() ? I18n::Tr("settings_host_ok") : I18n::Tr("settings_host_too_old"),
                    ImGui::ColorConvertFloat4ToU32(HostCompatible() ? Colors().Success : Colors().Error));
-        Tip("Whether this POE2Fixer offers every service the plugin was built for.\n"
-            "When it does not, the services answer empty values.");
-        changed |= Check("Overlay mode", "overlay", &m_WantsOverlay,
-                         "Asks the host to draw over the game (the overlay window).\n"
-                         "Off: the window only shows while the POE2Fixer menu is open.");
+        Tip(I18n::Tr("settings_host_tip"));
+        changed |= Check(I18n::Tr("settings_overlay_mode"), "overlay", &m_WantsOverlay,
+                         I18n::Tr("settings_overlay_mode_tip"));
         {
-            const LabelColumn col({ "Window opacity", "Toggle hotkey" });
+            // The label column is measured on the translated labels, every frame.
+            const char* opacityLabel = I18n::Tr("settings_window_opacity");
+            const char* hotkeyLabel = I18n::Tr("settings_toggle_hotkey");
+            const LabelColumn col({ opacityLabel, hotkeyLabel });
             ImGui::BeginDisabled(!m_ShowWindow);
-            changed |= SliderFloatRow(col, "Window opacity", "##opacity", &m_WindowAlpha, 0.3f, 1.0f, "%.1f",
-                                      "How see-through the window background is.\n1.0 is fully opaque.");
+            changed |= SliderFloatRow(col, opacityLabel, "##opacity", &m_WindowAlpha, 0.3f, 1.0f, "%.1f",
+                                      I18n::Tr("settings_window_opacity_tip"));
             ImGui::EndDisabled();
-            col.RowNoWidth("Toggle hotkey");
-            changed |= HotkeyCapture("##toggleKey", &m_ToggleKey,
-                                     "A key that shows or hides the info window while you play.\n"
-                                     "Click, then press a key or a mouse button; Esc cancels.");
+            col.RowNoWidth(hotkeyLabel);
+            changed |= HotkeyCapture("##toggleKey", &m_ToggleKey, I18n::Tr("settings_toggle_hotkey_tip"));
         }
         EndCard();
         ImGui::Spacing();
 
         // --- Demo tabs -------------------------------------------------------
         BeginCard("##examplePanels");
-        Heading(ICON_FA_TABLE_COLUMNS, "Demo tabs",
-                "Each switch adds one tab to the info window.\n"
-                "Every tab demonstrates one SDK service; its source is in examples/.");
+        Heading(ICON_FA_TABLE_COLUMNS, I18n::Tr("settings_demo_tabs"), I18n::Tr("settings_demo_tabs_help"));
         ImGui::BeginDisabled(!m_ShowWindow);
         // Groups 0-1 and 2-3 side by side when the card is wide enough, else stacked.
+        // kPanelGroups / kPanels hold keys: the texts are looked up here, each frame.
         auto drawGroups = [&](int firstGroup, int lastGroup) {
             int shown = -1;
             for (const PanelSwitch& s : kPanels) {
                 if (s.group < firstGroup || s.group > lastGroup) continue;
                 if (s.group != shown) {
                     if (shown >= 0) ImGui::Spacing();
-                    ImGui::TextDisabled("%s", kPanelGroups[s.group]);
+                    ImGui::TextDisabled("%s", I18n::Tr(kPanelGroups[s.group]));
                     shown = s.group;
                 }
-                changed |= Check(s.label, s.id, &(this->*s.member), s.tip);
+                changed |= Check(I18n::Tr(s.labelKey), s.id, &(this->*s.member), I18n::Tr(s.tipKey));
             }
         };
         if (WideEnoughForTwoColumns()) {
@@ -147,11 +152,13 @@ public:
         ImGui::EndDisabled();
 
         ImGui::Spacing();
-        const char* resetLabel = ICON_FA_ROTATE_LEFT "  Reset tabs###resetTabs";
-        AlignRight(ButtonWidth(resetLabel));
-        if (SubtleButton(resetLabel)) ImGui::OpenPopup("##confirmReset");
-        Tip("Turns every demo tab back to its default.");
-        if (ConfirmPopup("##confirmReset", "Turn every demo tab back to its default?", "Reset", "Cancel")) {
+        const std::string resetLabel =
+            std::string(ICON_FA_ROTATE_LEFT "  ") + I18n::Tr("settings_reset_tabs") + "###resetTabs";
+        AlignRight(ButtonWidth(resetLabel.c_str()));
+        if (SubtleButton(resetLabel.c_str())) ImGui::OpenPopup("##confirmReset");
+        Tip(I18n::Tr("settings_reset_tabs_tip"));
+        // No "no" text: the kit's own "Cancel" in the program language.
+        if (ConfirmPopup("##confirmReset", I18n::Tr("settings_reset_tabs_confirm"), I18n::Tr("settings_reset"))) {
             for (const PanelSwitch& s : kPanels) this->*s.member = s.defaultOn;
             changed = true;
         }
@@ -210,19 +217,19 @@ public:
     // The info window's contents (the window is open; see DrawUI).
     void DrawWindowContents(const PluginSDK::Snapshot& snapshot) {
         if (!snapshot.IsAttached) {
-            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Game not attached");
+            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "%s", I18n::Tr("window_not_attached"));
             return;
         }
 
         bool inGame = (snapshot.State == PluginSDK::GameState::InGame);
 
         if (ctx()->Game.IsOverlayMode()) {
-            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1), "[OVERLAY MODE]");
+            ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.3f, 1), "%s", I18n::Tr("window_overlay_mode"));
         }
 
         if (!inGame) {
-            ImGui::TextColored(ImVec4(1, 1, 0, 1), "Not in game (state: %d)",
-                static_cast<int>(snapshot.State));
+            ImGui::TextColored(ImVec4(1, 1, 0, 1), "%s",
+                I18n::TrF("window_not_in_game", { { "state", Num("%d", static_cast<int>(snapshot.State)) } }).c_str());
             return;
         }
 
@@ -232,73 +239,74 @@ public:
         }
         ImGui::Separator();
 
+        // TrId: a tab keeps its ImGui id (and so its selection) when the language changes.
         if (ImGui::BeginTabBar("##ExampleTabs")) {
-            if (ImGui::BeginTabItem("Area & Vitals")) {
+            if (ImGui::BeginTabItem(I18n::TrId("tab_area_vitals"))) {
                 DrawAreaAndVitals(snapshot);
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowBuffs && ImGui::BeginTabItem("Buffs")) {
+            if (m_ShowBuffs && ImGui::BeginTabItem(I18n::TrId("tab_buffs"))) {
                 Examples::DrawBuffsPanel(ctx(), snapshot);
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowEntities && ImGui::BeginTabItem("Entities")) {
+            if (m_ShowEntities && ImGui::BeginTabItem(I18n::TrId("tab_entities"))) {
                 Examples::DrawEntitiesPanel(ctx(), snapshot);
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowInventory && ImGui::BeginTabItem("Inventories")) {
+            if (m_ShowInventory && ImGui::BeginTabItem(I18n::TrId("tab_inventories"))) {
                 Examples::DrawInventoryPanel(ctx(), m_LastInventoryScan);
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowFlasks && ImGui::BeginTabItem("Flasks & Charms")) {
+            if (m_ShowFlasks && ImGui::BeginTabItem(I18n::TrId("tab_flasks"))) {
                 Examples::DrawFlasksPanel(ctx());
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowMemoryInfo && ImGui::BeginTabItem("Memory")) {
+            if (m_ShowMemoryInfo && ImGui::BeginTabItem(I18n::TrId("tab_memory"))) {
                 Examples::DrawMemoryPanel(ctx());
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowUiExplorer && ImGui::BeginTabItem("UI Explorer")) {
+            if (m_ShowUiExplorer && ImGui::BeginTabItem(I18n::TrId("tab_ui_explorer"))) {
                 m_UiExplorer.Draw(ctx());
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowComponentReader && ImGui::BeginTabItem("Components")) {
+            if (m_ShowComponentReader && ImGui::BeginTabItem(I18n::TrId("tab_components"))) {
                 Examples::ShowComponentReaderDemo(ctx(), snapshot);
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowRender && ImGui::BeginTabItem("Render")) {
+            if (m_ShowRender && ImGui::BeginTabItem(I18n::TrId("tab_render"))) {
                 Examples::DrawRenderPanel(ctx(), snapshot);
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowTerrain && ImGui::BeginTabItem("Terrain")) {
+            if (m_ShowTerrain && ImGui::BeginTabItem(I18n::TrId("tab_terrain"))) {
                 Examples::DrawTerrainPanel(ctx(), snapshot);
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowEvents && ImGui::BeginTabItem("Events")) {
+            if (m_ShowEvents && ImGui::BeginTabItem(I18n::TrId("tab_events"))) {
                 Examples::DrawEventsPanel(ctx(), m_eventsState);
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowLog && ImGui::BeginTabItem("Log")) {
+            if (m_ShowLog && ImGui::BeginTabItem(I18n::TrId("tab_log"))) {
                 Examples::DrawLogPanel(ctx(), m_logSentCount);
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowSkills && ImGui::BeginTabItem("Skills & Timing")) {
+            if (m_ShowSkills && ImGui::BeginTabItem(I18n::TrId("tab_skills"))) {
                 Examples::DrawSkillsPanel(ctx(), snapshot, m_skillsState);
                 ImGui::EndTabItem();
             }
 
-            if (m_ShowPrices && ImGui::BeginTabItem("Prices")) {
+            if (m_ShowPrices && ImGui::BeginTabItem(I18n::TrId("tab_prices"))) {
                 Examples::DrawPricesPanel(ctx());
                 ImGui::EndTabItem();
             }
@@ -350,68 +358,78 @@ private:
     }
 
     void DrawAreaAndVitals(const PluginSDK::Snapshot& snapshot) {
-        if (ImGui::CollapsingHeader("Area Info", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Text("Area: %s", snapshot.CurrentAreaName.c_str());
-            ImGui::Text("Level: %d", snapshot.CurrentAreaLevel);
-            ImGui::Text("Hash: %s", snapshot.CurrentAreaHash.c_str());
-            ImGui::Text("Town: %s  Hideout: %s",
-                snapshot.IsTown ? "Yes" : "No",
-                snapshot.IsHideout ? "Yes" : "No");
-            ImGui::Text("Area Change #: %llu",
-                static_cast<unsigned long long>(snapshot.AreaChangeCounter));
-            ImGui::Text("Screen: %dx%d", snapshot.ScreenWidth, snapshot.ScreenHeight);
+        // A printf line becomes a TrF text with named placeholders ("Level: {level}");
+        // Num formats the number, the translation places it.
+        if (ImGui::CollapsingHeader(I18n::TrId("area_info"), ImGuiTreeNodeFlags_DefaultOpen)) {
+            Show(I18n::TrF("area_name", { { "name", snapshot.CurrentAreaName } }));
+            Show(I18n::TrF("area_level", { { "level", Num("%d", snapshot.CurrentAreaLevel) } }));
+            Show(I18n::TrF("area_hash", { { "hash", snapshot.CurrentAreaHash } }));
+            // Two texts on one line: the gap is layout, so it is code (SameLine), never spaces in a value.
+            Show(I18n::TrF("area_town", { { "town", Examples::YesNo(snapshot.IsTown) } }));
+            ImGui::SameLine(0.0f, ImGui::GetFontSize());
+            Show(I18n::TrF("area_hideout", { { "hideout", Examples::YesNo(snapshot.IsHideout) } }));
+            Show(I18n::TrF("area_change_count",
+                           { { "count", Num("%llu", static_cast<unsigned long long>(snapshot.AreaChangeCounter)) } }));
+            Show(I18n::TrF("area_screen_size", { { "width", Num("%d", snapshot.ScreenWidth) },
+                                                 { "height", Num("%d", snapshot.ScreenHeight) } }));
         }
 
         // Map modifiers: match on StatId (the Stats.dat Id), not on statRowIndex,
-        // which moves when a patch inserts Stats.dat rows.
-        if (ImGui::CollapsingHeader("Area Modifiers")) {
+        // which moves when a patch inserts Stats.dat rows. mod.text is the game's own
+        // text and stays as the game gives it.
+        if (ImGui::CollapsingHeader(I18n::TrId("area_mods"))) {
             const auto mods = ctx()->Game.GetAreaMods();
-            if (mods.empty()) ImGui::TextDisabled("No area modifiers (not in a map?)");
+            if (mods.empty()) ImGui::TextDisabled("%s", I18n::Tr("area_mods_none"));
             for (const auto& mod : mods) {
                 ImGui::BulletText("%s", mod.text.c_str());
                 ImGui::SameLine();
-                ImGui::TextDisabled("%s = %d", mod.statId.empty() ? "(older host: no id)" : mod.statId.c_str(), mod.value);
+                ImGui::TextDisabled("%s = %d", mod.statId.empty() ? I18n::Tr("area_mod_no_id") : mod.statId.c_str(), mod.value);
             }
         }
 
-        if (ImGui::CollapsingHeader("Player Vitals", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::CollapsingHeader(I18n::TrId("vitals_header"), ImGuiTreeNodeFlags_DefaultOpen)) {
             const auto& v = snapshot.Vitals;
 
             float hpFrac = v.MaxHP > 0 ? (float)v.CurrentHP / v.MaxHP : 0;
             ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
-            char hpOv[64]; snprintf(hpOv, sizeof(hpOv), "HP: %d / %d (%d%%)",
-                v.CurrentHP, v.MaxHP, v.HPPercent);
-            ImGui::ProgressBar(hpFrac, ImVec2(-1, 18), hpOv);
+            const std::string hpOv = I18n::TrF("vitals_hp", { { "current", Num("%d", v.CurrentHP) },
+                                                              { "max", Num("%d", v.MaxHP) },
+                                                              { "percent", Num("%d", v.HPPercent) } });
+            // Height 0: the frame height, so the overlay text fits at every font size and script.
+            ImGui::ProgressBar(hpFrac, ImVec2(-FLT_MIN, 0.0f), hpOv.c_str());
             ImGui::PopStyleColor();
 
             if (v.MaxES > 0) {
                 float esFrac = (float)v.CurrentES / v.MaxES;
                 ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.2f, 0.5f, 0.9f, 1.0f));
-                char esOv[64]; snprintf(esOv, sizeof(esOv), "ES: %d / %d (%d%%)",
-                    v.CurrentES, v.MaxES, v.ESPercent);
-                ImGui::ProgressBar(esFrac, ImVec2(-1, 18), esOv);
+                const std::string esOv = I18n::TrF("vitals_es", { { "current", Num("%d", v.CurrentES) },
+                                                                  { "max", Num("%d", v.MaxES) },
+                                                                  { "percent", Num("%d", v.ESPercent) } });
+                ImGui::ProgressBar(esFrac, ImVec2(-FLT_MIN, 0.0f), esOv.c_str());
                 ImGui::PopStyleColor();
             }
 
             float mpFrac = v.MaxMP > 0 ? (float)v.CurrentMP / v.MaxMP : 0;
             ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.2f, 0.2f, 0.8f, 1.0f));
-            char mpOv[64]; snprintf(mpOv, sizeof(mpOv), "MP: %d / %d (%d%%)",
-                v.CurrentMP, v.MaxMP, v.MPPercent);
-            ImGui::ProgressBar(mpFrac, ImVec2(-1, 18), mpOv);
+            const std::string mpOv = I18n::TrF("vitals_mp", { { "current", Num("%d", v.CurrentMP) },
+                                                              { "max", Num("%d", v.MaxMP) },
+                                                              { "percent", Num("%d", v.MPPercent) } });
+            ImGui::ProgressBar(mpFrac, ImVec2(-FLT_MIN, 0.0f), mpOv.c_str());
             ImGui::PopStyleColor();
 
             ImGui::Spacing();
 
-            ImGui::Text("World: %.0f, %.0f, %.0f",
-                snapshot.Player.WorldX, snapshot.Player.WorldY, snapshot.Player.WorldZ);
-            ImGui::Text("Grid: %.1f, %.1f",
-                snapshot.Player.GridPositionX, snapshot.Player.GridPositionY);
+            Show(I18n::TrF("vitals_world", { { "x", Num("%.0f", snapshot.Player.WorldX) },
+                                             { "y", Num("%.0f", snapshot.Player.WorldY) },
+                                             { "z", Num("%.0f", snapshot.Player.WorldZ) } }));
+            Show(I18n::TrF("vitals_grid", { { "x", Num("%.1f", snapshot.Player.GridPositionX) },
+                                            { "y", Num("%.1f", snapshot.Player.GridPositionY) } }));
 
             float sx, sy;
             if (ctx()->Render.WorldToScreen(
                     snapshot.Player.WorldX, snapshot.Player.WorldY,
                     snapshot.Player.WorldZ, sx, sy)) {
-                ImGui::Text("Screen: %.0f, %.0f", sx, sy);
+                Show(I18n::TrF("vitals_screen", { { "x", Num("%.0f", sx) }, { "y", Num("%.0f", sy) } }));
             }
 
             // Player path (wchar → narrow display)
@@ -421,12 +439,12 @@ private:
                 narrowPath.reserve(p.Path.size());
                 for (wchar_t c : p.Path)
                     narrowPath += (c < 128) ? static_cast<char>(c) : '?';
-                ImGui::Text("Path: %s", narrowPath.c_str());
+                Show(I18n::TrF("vitals_path", { { "path", narrowPath } }));
             }
             // NearbyZone is a distance-from-player classification; for the Player
             // entity itself it has no meaning (always None). Shown per-entity
             // in the Entities tab where it's actually useful.
-            ImGui::Text("Entity ID: %u", p.Id);
+            Show(I18n::TrF("vitals_entity_id", { { "id", Num("%u", p.Id) } }));
         }
     }
 
@@ -487,43 +505,36 @@ private:
     int m_ToggleKey = 0;            // Windows virtual-key code, 0 = none
     bool m_ToggleKeyDown = false;
 
-    // The demo-tab switches, drawn by DrawSettings in groups.
+    // The demo-tab switches, drawn by DrawSettings in groups. The table holds KEYS of
+    // lang/en.json, never texts: a static is built once, the language can change later.
+    // I18n::Key marks each one for tools/plugin_i18n/gen.py --gate, which checks that the key is
+    // in lang/en.json (a bare "panel_buffs" literal would go unchecked, and en.json would
+    // report it as never used).
     struct PanelSwitch {
-        const char* label;
+        const char* labelKey;
         const char* id;
         bool ExamplePlugin::* member;
         bool defaultOn;
         int group;
-        const char* tip;
+        const char* tipKey;
     };
-    static constexpr const char* kPanelGroups[] = { "Player and items", "Prices", "Inspectors", "Services" };
+    static constexpr const char* kPanelGroups[] = {
+        I18n::Key("panel_group_player"), I18n::Key("panel_group_prices"),
+        I18n::Key("panel_group_inspectors"), I18n::Key("panel_group_services") };
     static constexpr PanelSwitch kPanels[] = {
-        { "Player buffs", "buffs", &ExamplePlugin::m_ShowBuffs, true, 0,
-          "Active buffs with remaining time, charges and a text filter." },
-        { "Flasks and charms", "flasks", &ExamplePlugin::m_ShowFlasks, true, 0,
-          "Flask and charm slots, charges and active state." },
-        { "Inventories", "inventory", &ExamplePlugin::m_ShowInventory, false, 0,
-          "Inventory grids with item details and mods.\nScans at most once a second." },
-        { "Skills and timing", "skills", &ExamplePlugin::m_ShowSkills, true, 0,
-          "The skill bar, cooldowns and cast timing." },
-        { "Prices", "prices", &ExamplePlugin::m_ShowPrices, true, 1,
-          "Item prices through the host's price service\n(source and league: POE2Fixer Settings -> Prices)." },
-        { "Nearby entities", "entities", &ExamplePlugin::m_ShowEntities, true, 2,
-          "Monsters, NPCs, chests and items around you,\nwith their components." },
-        { "Component reader", "components", &ExamplePlugin::m_ShowComponentReader, false, 2,
-          "Every component reader and UI element helper of the SDK." },
-        { "Game UI explorer", "uiExplorer", &ExamplePlugin::m_ShowUiExplorer, false, 2,
-          "Browse the game's UI tree; highlights the selected element." },
-        { "Memory viewer", "memory", &ExamplePlugin::m_ShowMemoryInfo, false, 2,
-          "Hex view and typed reads through the memory service." },
-        { "Render demo", "render", &ExamplePlugin::m_ShowRender, true, 3,
-          "World-to-screen projection and overlay drawing." },
-        { "Terrain demo", "terrain", &ExamplePlugin::m_ShowTerrain, true, 3,
-          "Walkable grid and terrain height queries." },
-        { "Events demo", "events", &ExamplePlugin::m_ShowEvents, true, 3,
-          "Area change, frame and attach events as they arrive." },
-        { "Log demo", "log", &ExamplePlugin::m_ShowLog, true, 3,
-          "Writes lines to the POE2Fixer log at each level." },
+        { I18n::Key("panel_buffs"), "buffs", &ExamplePlugin::m_ShowBuffs, true, 0, I18n::Key("panel_buffs_tip") },
+        { I18n::Key("panel_flasks"), "flasks", &ExamplePlugin::m_ShowFlasks, true, 0, I18n::Key("panel_flasks_tip") },
+        { I18n::Key("panel_inventory"), "inventory", &ExamplePlugin::m_ShowInventory, false, 0, I18n::Key("panel_inventory_tip") },
+        { I18n::Key("panel_skills"), "skills", &ExamplePlugin::m_ShowSkills, true, 0, I18n::Key("panel_skills_tip") },
+        { I18n::Key("panel_prices"), "prices", &ExamplePlugin::m_ShowPrices, true, 1, I18n::Key("panel_prices_tip") },
+        { I18n::Key("panel_entities"), "entities", &ExamplePlugin::m_ShowEntities, true, 2, I18n::Key("panel_entities_tip") },
+        { I18n::Key("panel_components"), "components", &ExamplePlugin::m_ShowComponentReader, false, 2, I18n::Key("panel_components_tip") },
+        { I18n::Key("panel_ui_explorer"), "uiExplorer", &ExamplePlugin::m_ShowUiExplorer, false, 2, I18n::Key("panel_ui_explorer_tip") },
+        { I18n::Key("panel_memory"), "memory", &ExamplePlugin::m_ShowMemoryInfo, false, 2, I18n::Key("panel_memory_tip") },
+        { I18n::Key("panel_render"), "render", &ExamplePlugin::m_ShowRender, true, 3, I18n::Key("panel_render_tip") },
+        { I18n::Key("panel_terrain"), "terrain", &ExamplePlugin::m_ShowTerrain, true, 3, I18n::Key("panel_terrain_tip") },
+        { I18n::Key("panel_events"), "events", &ExamplePlugin::m_ShowEvents, true, 3, I18n::Key("panel_events_tip") },
+        { I18n::Key("panel_log"), "log", &ExamplePlugin::m_ShowLog, true, 3, I18n::Key("panel_log_tip") },
     };
     std::chrono::steady_clock::time_point m_LastInventoryScan;
     Examples::PluginUiExplorer m_UiExplorer;
@@ -547,6 +558,6 @@ extern "C" PLUGIN_API void DestroyPlugin(PluginSDK::Plugin* plugin) {
 POEFIXER_PLUGIN_INFO(
     "ExamplePlugin",
     "Example Plugin",
-    "1.0.3",
+    "1.0.4",
     "POEFixer",
     "Reference plugin for developers: live demos of every SDK service, from entities, buffs and inventories to the game UI tree, memory and prices.")

@@ -70,6 +70,45 @@ ImGui::SetNextWindowBgAlpha(m_alpha);
 if (!m_showWindow) SaveSettings();
 ```
 
+## Localization (PluginI18n.h)
+
+Every text of this plugin follows the program language (POE2Fixer 371 or later; English on an
+older host). `examples/Text.h` is the short version of the rules; `PluginI18n.h` (included by
+`PluginSDK.h`) has the full API.
+
+- **Files.** `lang/en.json` plus one file per program language (`pt_BR`, `ru`, `th`, `de`, `fr`,
+  `es`, `ja`, `ko`, `zh_TW`), each one flat JSON object of `"key": "text"`, UTF-8, next to the DLL
+  in `Plugins\ExamplePlugin\lang\`. The English is also compiled in: after editing `lang/en.json`
+  run `python tools/plugin_i18n/gen.py Plugins/ExamplePlugin` (it writes `lang_en.generated.h`,
+  included once, by `ExamplePlugin.cpp`, after `PluginSDK.h`).
+- **Calls.** `I18n::Tr("key")` for a text; `I18n::TrF("key", { { "name", value } })` for a text
+  with `{name}` placeholders (numbers are formatted by code, `Num("%.1f", x)`, never by a printf
+  format in the text); `I18n::TrId("key")` for every widget whose label is its ImGui id (Button,
+  Checkbox, TreeNode, CollapsingHeader, BeginTabItem, Selectable, Combo, InputText,
+  TableSetupColumn): it returns `"<text>###<key>"`, so the id is the same in every language;
+  `I18n::Key("key")` for a key kept in a table (`kPanels` in `ExamplePlugin.cpp`) and looked up when
+  drawn. Nothing translated is kept in a `static`.
+- **Layout is code.** No leading, trailing or doubled spaces in a text: two values on one line are
+  two keys and `ImGui::SameLine`, an indented line is `ImGui::Indent`. No pixel widths sized for the
+  English text: a fixed table column of width 0 (in a table that is not `Resizable`) fits its
+  translated header every frame, a field width is in em (`ImGui::GetFontSize() * n`), a label column
+  is measured (`PluginUi::LabelColumn`). A long label is fine: the kit's widgets keep their `###id`
+  at any length. Cut a localized text by characters, never bytes (`Shorten` in `examples/Text.h`).
+- **What stays English.** SDK names (services, components, enum identifiers such as
+  `EntityTypeName`), the game's own strings (they arrive in the game's language), log lines and the
+  clipboard's debug dump. A game term in a translation is the game's own word for it in that
+  language (its client tables), e.g. Russian "Волшебный" for Magic, "Собственные" for implicit mods.
+- **The gate.** `python tools/plugin_i18n/gen.py --gate --check Plugins/ExamplePlugin` checks the
+  ten files (keys, `{placeholders}`, no printf conversion, `###` or layout spacing in a value), that
+  every `Tr` / `TrF` / `TrId` / `Key` key is in `lang/en.json`, that every key of `lang/en.json` is
+  used (a plugin that builds keys at run time lists their prefix in `lang/dynamic_prefixes.txt`),
+  that each `TrF` call passes exactly its text's placeholders, and that the generated header is
+  current. The publisher runs it before every release.
+- **Local check.** Building `POEFixer.sln` copies `lang\*.json` next to the DLL
+  (`x64\Release\Plugins\ExamplePlugin\lang\`), so switching the program language shows the
+  translations right away. `tools/plugin_ui_preview --lang <code>` renders the settings tab in a
+  language without the game.
+
 ## Creating Your Own Plugin
 
 1. Copy `Plugins/ExamplePlugin/` to `Plugins/YourPlugin/` (keep the `POEFixer/` folder next to `Plugins/`: the project compiles against `POEFixer/plugin_sdk` and `POEFixer/imgui` by relative path)
@@ -79,4 +118,9 @@ if (!m_showWindow) SaveSettings();
 5. Use `ctx()->Service.Method(...)` to access game data (Game, Entities, Components, Inventory, Ui, Render, Terrain, Memory, Log, Events, Overlay, Flasks, Prices, Runeshape, Atlas, Sekhema)
 6. Start `OnEnable()`, `DrawSettings()` and `DrawUI()` with `ImGui::SetCurrentContext(ctx()->ImGuiContext)` (`BindImGui()` in `ExamplePlugin.cpp`). With Settings -> "Separate menu window" `DrawSettings()` runs in the menu window's ImGui context and `DrawUI()` in the in-game overlay's, each with its own frame count, time, display size and windows: never compare `ImGui::GetFrameCount()`, ids or windows between the two, and in `DrawSettings()` take the game's size from `ctx()->Game.GetScreenSize()`, not `io.DisplaySize`
 7. Lay out `DrawSettings()` with `PluginUi.h` (cards, label columns, tips)
-8. Build and copy the DLL to `Plugins/YourPlugin/` next to the POEFixer executable
+8. Put every text a user reads in `lang/en.json` and draw it through `I18n::Tr` / `TrF` / `TrId` /
+   `Key` (see "Localization" above and `examples/Text.h`); run `python tools/plugin_i18n/gen.py
+   Plugins/YourPlugin`, include the generated `lang_en.generated.h` once after `PluginSDK.h`, add the
+   nine other language files and check them with `--gate --check`
+9. Build and copy the DLL to `Plugins/YourPlugin/` next to the POEFixer executable, with its `lang/`
+   folder (the solution build already copies `lang/` into its output folder)

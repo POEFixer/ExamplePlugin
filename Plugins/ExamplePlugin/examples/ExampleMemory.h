@@ -8,6 +8,7 @@
 
 #include "../../../POEFixer/plugin_sdk/PluginSDK.h"
 #include "../../../POEFixer/imgui/imgui.h"
+#include "Text.h"
 #include <vector>
 #include <cstdio>
 
@@ -19,46 +20,51 @@ inline void DrawMemoryPanel(const PluginSDK::Context* ctx) {
     uintptr_t base = ctx->Memory.GetBaseAddress();
     uintptr_t modSize = ctx->Memory.GetModuleSize();
 
-    ImGui::Text("Base Address: 0x%llX", static_cast<unsigned long long>(base));
-    ImGui::Text("Module Size: 0x%llX (%llu KB)",
-                static_cast<unsigned long long>(modSize),
-                static_cast<unsigned long long>(modSize / 1024));
-    ImGui::Text("PID: %u", ctx->Game.GetProcessId());
+    Show(I18n::TrF("memory_base_address", { { "address", Num("0x%llX", static_cast<unsigned long long>(base)) } }));
+    Show(I18n::TrF("memory_module_size", { { "size", Num("0x%llX", static_cast<unsigned long long>(modSize)) },
+                                           { "kb", Num("%llu", static_cast<unsigned long long>(modSize / 1024)) } }));
+    Show(I18n::TrF("memory_pid", { { "pid", Num("%u", ctx->Game.GetProcessId()) } }));
 
     // --- PE Header Verification ---
     if (base != 0) {
         uint16_t dosSignature = 0;
         ctx->Memory.Read(base, &dosSignature, sizeof(dosSignature));
-        ImGui::Text("DOS Signature: 0x%04X (%s)", dosSignature,
-                    dosSignature == 0x5A4D ? "MZ - Valid PE" : "Unknown");
+        Show(I18n::TrF("memory_dos_signature",
+                       { { "value", Num("0x%04X", dosSignature) },
+                         { "verdict", dosSignature == 0x5A4D ? I18n::Tr("memory_dos_valid")
+                                                             : I18n::Tr("common_unknown") } }));
 
         uint32_t peOffset = 0;
         ctx->Memory.Read(base + 0x3C, &peOffset, sizeof(peOffset));
         if (peOffset > 0 && peOffset < modSize) {
             uint32_t peSignature = 0;
             ctx->Memory.Read(base + peOffset, &peSignature, sizeof(peSignature));
-            ImGui::Text("PE Signature: 0x%08X (%s)", peSignature,
-                        peSignature == 0x00004550 ? "PE\\0\\0 - Valid" : "Invalid");
+            Show(I18n::TrF("memory_pe_signature",
+                           { { "value", Num("0x%08X", peSignature) },
+                             { "verdict", peSignature == 0x00004550 ? I18n::Tr("memory_pe_valid")
+                                                                    : I18n::Tr("memory_invalid") } }));
 
             uint16_t machine = 0;
             ctx->Memory.Read(base + peOffset + 4, &machine, sizeof(machine));
-            ImGui::Text("Machine: 0x%04X (%s)", machine,
-                        machine == 0x8664 ? "x64"
-                        : machine == 0x14C ? "x86" : "Other");
+            Show(I18n::TrF("memory_machine",
+                           { { "value", Num("0x%04X", machine) },
+                             { "name", machine == 0x8664 ? "x64"
+                                       : machine == 0x14C ? "x86" : I18n::Tr("memory_other") } }));
         }
     }
 
     ImGui::Separator();
 
-    if (ImGui::CollapsingHeader("Pattern Addresses", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader(I18n::TrId("memory_patterns"), ImGuiTreeNodeFlags_DefaultOpen)) {
+        // The host's pattern names (GetPatternAddress arguments): never translated.
         const char* patterns[] = {
             "Game States", "File Root", "AreaChangeCounter",
             "Terrain Rotator Helper", "Terrain Rotation Selector", "GameCullSize"
         };
         if (ImGui::BeginTable("PatternTable", 2,
             ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-            ImGui::TableSetupColumn("Pattern", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Address", ImGuiTableColumnFlags_WidthFixed, 140);
+            ImGui::TableSetupColumn(I18n::TrId("memory_col_pattern"), ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn(I18n::TrId("common_address"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
             ImGui::TableHeadersRow();
 
             for (auto* name : patterns) {
@@ -74,29 +80,29 @@ inline void DrawMemoryPanel(const PluginSDK::Context* ctx) {
                     if (ImGui::IsItemHovered() && ImGui::IsItemClicked())
                         ImGui::SetClipboardText(buf);
                 } else {
-                    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Not found");
+                    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", I18n::Tr("memory_not_found"));
                 }
             }
             ImGui::EndTable();
         }
     }
 
-    if (ImGui::CollapsingHeader("Memory Hex Viewer")) {
+    if (ImGui::CollapsingHeader(I18n::TrId("memory_hex_viewer"))) {
         static char addrInput[20] = "";
         static uintptr_t viewAddr = 0;
         static int viewSize = 256;
-        ImGui::InputText("Address (hex)", addrInput, sizeof(addrInput));
+        ImGui::InputText(I18n::TrId("memory_address_hex"), addrInput, sizeof(addrInput));
         ImGui::SameLine();
-        if (ImGui::Button("Go")) {
+        if (ImGui::Button(I18n::TrId("memory_go"))) {
             viewAddr = strtoull(addrInput, nullptr, 16);
         }
         ImGui::SameLine();
-        if (ImGui::Button("Base")) {
+        if (ImGui::Button(I18n::TrId("memory_base"))) {
             viewAddr = base;
             snprintf(addrInput, sizeof(addrInput), "%llX",
                      static_cast<unsigned long long>(base));
         }
-        ImGui::SliderInt("Bytes", &viewSize, 16, 512);
+        ImGui::SliderInt(I18n::TrId("memory_bytes"), &viewSize, 16, 512);
 
         if (viewAddr != 0) {
             std::vector<uint8_t> data(viewSize);
@@ -109,7 +115,7 @@ inline void DrawMemoryPanel(const PluginSDK::Context* ctx) {
                         ImGui::SameLine();
                         ImGui::Text("%02X", data[i + j]);
                     }
-                    ImGui::SameLine(0, 20);
+                    ImGui::SameLine(0.0f, ImGui::GetFontSize());   // gaps scale with the font, never pixels
                     char ascii[17] = {};
                     for (int j = 0; j < 16 && (i + j) < viewSize; j++) {
                         uint8_t c = data[i + j];
@@ -118,16 +124,17 @@ inline void DrawMemoryPanel(const PluginSDK::Context* ctx) {
                     ImGui::TextDisabled("%s", ascii);
                 }
             } else {
-                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1),
-                                   "Read failed at 0x%llX",
-                                   static_cast<unsigned long long>(viewAddr));
+                ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "%s",
+                    I18n::TrF("memory_read_failed",
+                              { { "address", Num("0x%llX", static_cast<unsigned long long>(viewAddr)) } }).c_str());
             }
         }
     }
 
+    // The header and the call list name the SDK (English); the sentence is translated.
     if (ImGui::CollapsingHeader("MemoryService API")) {
-        ImGui::TextWrapped(
-            "The v6 MemoryService exposes the following helpers:\n"
+        ImGui::TextWrapped("%s", I18n::Tr("memory_api_intro"));
+        ImGui::TextUnformatted(
             "  ctx->Memory.Read(addr, buf, size)\n"
             "  ctx->Memory.ReadString(addr)           - null-terminated ASCII\n"
             "  ctx->Memory.ReadWString(addr)          - null-terminated wide\n"

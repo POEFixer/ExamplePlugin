@@ -23,6 +23,7 @@
 
 #include "../../../POEFixer/plugin_sdk/PluginSDK.h"
 #include "../../../POEFixer/imgui/imgui.h"
+#include "Text.h"
 
 #include <chrono>
 #include <cstdint>
@@ -124,7 +125,7 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
                             const PluginSDK::Snapshot& snapshot,
                             SkillsTabState& state) {
     if (!snapshot.Player.Components.HasActor()) {
-        ImGui::TextColored(ImVec4(1, 0.6f, 0.2f, 1), "Player has no Actor component");
+        ImGui::TextColored(ImVec4(1, 0.6f, 0.2f, 1), "%s", I18n::Tr("skills_no_actor"));
         return;
     }
     auto actor  = ctx->Components.ReadActor(snapshot.Player.Components.Actor);
@@ -150,19 +151,19 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
     // id — see SkillBarDecode.h). This is exactly what a DPS-over-the-bar overlay
     // needs: walk slots 0..N, resolve the skill, read its game-computed DPS
     // (stat 692, EnumerateSkillStats) and draw it over that icon.
-    if (ImGui::CollapsingHeader("Skill Bar Slots -> DPS", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader(I18n::TrId("skills_bar_dps"), ImGuiTreeNodeFlags_DefaultOpen)) {
         int maxSlot = -1;
         for (const auto& s : skills)
             if (s.IsOnSkillBar && s.SkillSlotIndex > maxSlot) maxSlot = s.SkillSlotIndex;
 
         if (maxSlot < 0) {
-            ImGui::TextDisabled("No skills detected on the main skill bar "
-                                "(open the game with skills socketed).");
+            ImGui::TextDisabled("%s", I18n::Tr("skills_no_bar_skills"));
         } else if (ImGui::BeginTable("BarSlotsT", 3,
                                      ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-            ImGui::TableSetupColumn("Slot", ImGuiTableColumnFlags_WidthFixed, 44.0f);
-            ImGui::TableSetupColumn("Skill");
-            ImGui::TableSetupColumn("DPS (game, stat 692)");
+            // Width 0: fits the translated header (and the slot numbers) every frame.
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_slot"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_skill"));
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_game_dps"));
             ImGui::TableHeadersRow();
             for (int i = 0; i <= maxSlot; ++i) {
                 const PluginSDK::ActiveSkill* found = nullptr;
@@ -172,7 +173,7 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
                 ImGui::TableNextRow();
                 ImGui::TableNextColumn(); ImGui::Text("%d", i);
                 if (!found) {
-                    ImGui::TableNextColumn(); ImGui::TextDisabled("(empty)");
+                    ImGui::TableNextColumn(); ImGui::TextDisabled("%s", I18n::Tr("common_empty"));
                     ImGui::TableNextColumn(); ImGui::TextDisabled("-");
                     continue;
                 }
@@ -186,24 +187,24 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
                 }
                 ImGui::TableNextColumn();
                 if (dps100 >= 0) ImGui::TextColored(ImVec4(0.3f, 1, 0.3f, 1), "%.2f", dps100 / 100.0);
-                else             ImGui::TextDisabled("n/a (utility / avg-dmg skill)");
+                else             ImGui::TextDisabled("%s", I18n::Tr("skills_dps_not_available"));
             }
             ImGui::EndTable();
         }
     }
 
     // --- Block 1: Live View ----------------------------------------------
-    if (ImGui::CollapsingHeader("Skill Bar Live View", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader(I18n::TrId("skills_live_view"), ImGuiTreeNodeFlags_DefaultOpen)) {
         if (ImGui::BeginTable("LiveSkillT", 8,
                               ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-            ImGui::TableSetupColumn("Name");
-            ImGui::TableSetupColumn("Bar");
-            ImGui::TableSetupColumn("Stage");
-            ImGui::TableSetupColumn("Type");
-            ImGui::TableSetupColumn("Uses");
-            ImGui::TableSetupColumn("CD(ms)");
-            ImGui::TableSetupColumn("Charges");
-            ImGui::TableSetupColumn("Usable");
+            ImGui::TableSetupColumn(I18n::TrId("common_name"));
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_bar"));
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_stage"));
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_type"));
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_uses"));
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_cooldown"));
+            ImGui::TableSetupColumn(I18n::TrId("common_charges"));
+            ImGui::TableSetupColumn(I18n::TrId("common_usable"));
             ImGui::TableHeadersRow();
             for (const auto& s : skills) {
                 ImGui::TableNextRow();
@@ -225,17 +226,21 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
                 }
                 ImGui::TableNextColumn();
                 ImGui::TextColored(s.CanBeUsed ? ImVec4(0.3f,1,0.3f,1) : ImVec4(1,0.3f,0.3f,1),
-                                   s.CanBeUsed ? "yes" : "no");
+                                   "%s", YesNo(s.CanBeUsed));
             }
             ImGui::EndTable();
         }
     }
 
     // --- Block 2: Animation Timing Sampler -------------------------------
-    if (ImGui::CollapsingHeader("Animation Timing Sampler", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Text("Buffs fingerprint: 0x%016llX  (%s)",
-                    (unsigned long long)state.buffs_fingerprint,
-                    state.buffs_fingerprint == state.prev_buffs_fingerprint ? "stable" : "just changed");
+    if (ImGui::CollapsingHeader(I18n::TrId("skills_timing_sampler"), ImGuiTreeNodeFlags_DefaultOpen)) {
+        Show(I18n::TrF("skills_buffs_fingerprint",
+                       { { "value", Num("0x%016llX", (unsigned long long)state.buffs_fingerprint) } }));
+        ImGui::SameLine();
+        Show(I18n::TrF("skills_buffs_fingerprint_state",
+                       { { "state", state.buffs_fingerprint == state.prev_buffs_fingerprint
+                                        ? I18n::Tr("skills_fingerprint_stable")
+                                        : I18n::Tr("skills_fingerprint_changed") } }));
 
         // Detect animation transitions.
         const bool is_action = IsActionAnimation(actor.AnimationId);
@@ -306,26 +311,30 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
             state.auto_prev_anim_name = actor.AnimationName;
         }
 
+        // The animation names are the game's own.
+        const char* animKind = is_action ? I18n::Tr("skills_anim_action") : I18n::Tr("skills_anim_idle");
         if (state.auto_last_duration_ms > 0.0f) {
-            ImGui::Text("Current Anim: %s (0x%X)%s — last: %.0f ms (%s)",
-                        actor.AnimationName.c_str(), actor.AnimationId,
-                        is_action ? " — action" : " — idle/run/etc",
-                        state.auto_last_duration_ms,
-                        state.auto_last_anim_name.c_str());
+            Show(I18n::TrF("skills_current_anim_last",
+                           { { "name", actor.AnimationName },
+                             { "id", Num("0x%X", actor.AnimationId) },
+                             { "kind", animKind },
+                             { "ms", Num("%.0f", state.auto_last_duration_ms) },
+                             { "last", state.auto_last_anim_name } }));
         } else {
-            ImGui::Text("Current Anim: %s (0x%X)%s",
-                        actor.AnimationName.c_str(), actor.AnimationId,
-                        is_action ? " — action" : " — idle/run/etc");
+            Show(I18n::TrF("skills_current_anim",
+                           { { "name", actor.AnimationName },
+                             { "id", Num("0x%X", actor.AnimationId) },
+                             { "kind", animKind } }));
         }
         ImGui::Spacing();
 
         if (ImGui::BeginTable("SamplerT", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-            ImGui::TableSetupColumn("Skill");
-            ImGui::TableSetupColumn("Mode");
-            ImGui::TableSetupColumn("Samples");
-            ImGui::TableSetupColumn("Last(ms)");
-            ImGui::TableSetupColumn("EMA(ms)");
-            ImGui::TableSetupColumn("Action");
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_skill"));
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_mode"));
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_samples"));
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_last_ms"));
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_ema_ms"));
+            ImGui::TableSetupColumn(I18n::TrId("skills_col_action"));
             ImGui::TableHeadersRow();
             for (const auto& s : skills) {
                 ImGui::TableNextRow();
@@ -336,16 +345,17 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
                 if (it == state.timings.end() || it->second.mode == SkillTiming::Mode::None) {
                     ImGui::TextDisabled("-");
                 } else {
-                    ImGui::Text("%s", it->second.mode == SkillTiming::Mode::Auto ? "auto" : "manual");
+                    ImGui::Text("%s", it->second.mode == SkillTiming::Mode::Auto ? I18n::Tr("skills_mode_auto")
+                                                                                 : I18n::Tr("skills_mode_manual"));
                 }
                 ImGui::TableNextColumn(); ImGui::Text("%d", it != state.timings.end() ? it->second.samples : 0);
                 ImGui::TableNextColumn(); ImGui::Text("%.0f", it != state.timings.end() ? it->second.last_measured_ms : 0.0f);
                 ImGui::TableNextColumn(); ImGui::Text("%.0f", it != state.timings.end() ? it->second.ema_ms : 0.0f);
                 ImGui::TableNextColumn();
                 if (!s.Name.empty() && state.manual_calibrating_skill == s.Name) {
-                    if (ImGui::SmallButton("Cancel")) state.manual_calibrating_skill.clear();
+                    if (ImGui::SmallButton(I18n::TrId("skills_calibrate_cancel"))) state.manual_calibrating_skill.clear();
                 } else {
-                    if (ImGui::SmallButton("Calibrate")) {
+                    if (ImGui::SmallButton(I18n::TrId("skills_calibrate"))) {
                         if (!s.Name.empty()) state.manual_calibrating_skill = s.Name;
                     }
                 }
@@ -354,30 +364,25 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
             ImGui::EndTable();
         }
 
-        if (ImGui::Button("Reset all timings")) {
+        if (ImGui::Button(I18n::TrId("skills_reset_timings"))) {
             state.timings.clear();
         }
 
         ImGui::Spacing();
-        ImGui::TextWrapped(
-            "Tip: a macro-plugin spamming Whirling Slash + Twister can copy this "
-            "Mode-Auto/Manual + EMA logic and use ema_ms as the inter-press delay. "
-            "Auto attribution works for cooldown-bound skills (Twister); use "
-            "[Calibrate] for non-cooldown skills (Whirling Slash) and replay a "
-            "few hits to populate the EMA before relying on it.");
+        ImGui::TextWrapped("%s", I18n::Tr("skills_sampler_tip"));
     }
 
     // --- Block 3: DAT Pointer Inspector ----------------------------------
-    if (ImGui::CollapsingHeader("DAT Pointer Inspector")) {
+    if (ImGui::CollapsingHeader(I18n::TrId("skills_dat_inspector"))) {
         if (skills.empty()) {
-            ImGui::TextDisabled("No active skills");
+            ImGui::TextDisabled("%s", I18n::Tr("skills_no_active"));
         } else {
             if (state.dat_inspect_skill_index < 0
                 || state.dat_inspect_skill_index >= (int)skills.size()) {
                 state.dat_inspect_skill_index = 0;
             }
             const char* current = skills[state.dat_inspect_skill_index].Name.c_str();
-            if (ImGui::BeginCombo("Skill", current)) {
+            if (ImGui::BeginCombo(I18n::TrId("skills_dat_skill"), current)) {
                 for (int i = 0; i < (int)skills.size(); ++i) {
                     bool selected = (i == state.dat_inspect_skill_index);
                     if (ImGui::Selectable(skills[i].Name.c_str(), selected)) {
@@ -394,7 +399,7 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
             int32_t ok = 0;
             if (addr != 0) ok = ctx->Memory.Read(addr, buf, sizeof(buf));
             if (!ok) {
-                ImGui::TextDisabled("Read failed or address null");
+                ImGui::TextDisabled("%s", I18n::Tr("skills_read_failed"));
             } else {
                 ImGui::BeginChild("DatHex", ImVec2(0, 260), true);
                 for (size_t row = 0; row < sizeof(buf); row += 16) {
@@ -421,16 +426,16 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
     // 695 = casts/s*100, 1982/1983 = avg damage *100) is computed by the game
     // for contexts it displays; alt contexts (infusion tabs, weapon swap) are
     // evaluated transiently and may not be present.
-    if (ImGui::CollapsingHeader("Evaluated Stat Sets + DPS")) {
+    if (ImGui::CollapsingHeader(I18n::TrId("skills_stat_sets"))) {
         if (skills.empty()) {
-            ImGui::TextDisabled("No active skills");
+            ImGui::TextDisabled("%s", I18n::Tr("skills_no_active"));
         } else {
             if (state.stat_sets_skill_index < 0
                 || state.stat_sets_skill_index >= (int)skills.size()) {
                 state.stat_sets_skill_index = 0;
             }
             const char* current = skills[state.stat_sets_skill_index].Name.c_str();
-            if (ImGui::BeginCombo("Skill##statsets", current)) {
+            if (ImGui::BeginCombo(I18n::TrId("skills_stat_sets_skill"), current)) {
                 for (int i = 0; i < (int)skills.size(); ++i) {
                     bool selected = (i == state.stat_sets_skill_index);
                     if (ImGui::Selectable(skills[i].Name.c_str(), selected)) {
@@ -465,31 +470,31 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
             }
 
             if (dps.set >= 0) {
-                ImGui::TextColored(ImVec4(0.3f, 1, 0.3f, 1),
-                                   "Game-computed DPS: %.2f  (stat 692, set %d)",
-                                   dps.value / 100.0, dps.set);
+                ImGui::TextColored(ImVec4(0.3f, 1, 0.3f, 1), "%s",
+                    I18n::TrF("skills_game_dps", { { "dps", Num("%.2f", dps.value / 100.0) } }).c_str());
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.3f, 1, 0.3f, 1), "%s",
+                    I18n::TrF("skills_game_dps_source", { { "set", Num("%d", dps.set) } }).c_str());
             } else if (show_avg.set >= 0 && show_avg.value != 0) {
-                ImGui::TextColored(ImVec4(1, 0.8f, 0.3f, 1),
-                                   "This skill displays AVERAGE DAMAGE instead of DPS (stat 2079 set)");
+                ImGui::TextColored(ImVec4(1, 0.8f, 0.3f, 1), "%s", I18n::Tr("skills_shows_average"));
             } else {
-                ImGui::TextDisabled(
-                    "No DPS stat in this skill's evaluated sets (utility/support "
-                    "skill, or average-damage display mode).");
+                ImGui::TextDisabled("%s", I18n::Tr("skills_no_dps_stat"));
             }
-            if (aps.set >= 0)     ImGui::Text("Attacks/s: %.2f", aps.value / 100.0);
-            if (cps.set >= 0)     ImGui::Text("Casts/s: %.2f", cps.value / 100.0);
-            if (avg_hit.set >= 0) ImGui::Text("Avg damage per hit: %.2f", avg_hit.value / 100.0);
-            if (avg_use.set >= 0) ImGui::Text("Avg damage per use: %.2f", avg_use.value / 100.0);
-            if (cast_ms.set >= 0) ImGui::Text("Base cast time: %d ms", cast_ms.value);
+            if (aps.set >= 0)     Show(I18n::TrF("skills_attacks_per_second", { { "value", Num("%.2f", aps.value / 100.0) } }));
+            if (cps.set >= 0)     Show(I18n::TrF("skills_casts_per_second", { { "value", Num("%.2f", cps.value / 100.0) } }));
+            if (avg_hit.set >= 0) Show(I18n::TrF("skills_avg_damage_hit", { { "value", Num("%.2f", avg_hit.value / 100.0) } }));
+            if (avg_use.set >= 0) Show(I18n::TrF("skills_avg_damage_use", { { "value", Num("%.2f", avg_use.value / 100.0) } }));
+            if (cast_ms.set >= 0) Show(I18n::TrF("skills_base_cast_time", { { "value", Num("%d", cast_ms.value) } }));
             // Cross-check the game's formula: dps = rate/100 * avg (both x100).
             if (dps.set >= 0 && avg_use.set >= 0 && (aps.set >= 0 || cps.set >= 0)) {
                 double rate = (aps.set >= 0 ? aps.value : cps.value) / 100.0;
-                ImGui::TextDisabled("Cross-check rate*avg = %.2f", rate * (avg_use.value / 100.0));
+                ImGui::TextDisabled("%s", I18n::TrF("skills_cross_check",
+                    { { "value", Num("%.2f", rate * (avg_use.value / 100.0)) } }).c_str());
             }
             ImGui::Spacing();
 
             if (stats.empty()) {
-                ImGui::TextDisabled("No stat sets resolved for this skill");
+                ImGui::TextDisabled("%s", I18n::Tr("skills_no_stat_sets"));
             } else {
                 int currentSet = -1;
                 bool setOpen = false;
@@ -500,14 +505,18 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
                         setOpen = false;
                         int count = 0;
                         for (const auto& e2 : stats) if (e2.SetIndex == currentSet) ++count;
-                        char label[64];
-                        std::snprintf(label, sizeof(label), "Set %d (%d stats)", currentSet, count);
-                        if (ImGui::TreeNode(label)) {
+                        // The text holds the stat count; the id after "###" only the set.
+                        const std::string label =
+                            I18n::TrF("skills_stat_set", { { "set", Num("%d", currentSet) },
+                                                           { "count", Num("%d", count) } }) +
+                            "###set" + std::to_string(currentSet);
+                        if (ImGui::TreeNode(label.c_str())) {
                             if (ImGui::BeginTable("SkillStatT", 3,
                                                   ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-                                ImGui::TableSetupColumn("StatId (rid+1)", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-                                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-                                ImGui::TableSetupColumn("Value/100");
+                                // "StatId" names the SDK field.
+                                ImGui::TableSetupColumn("StatId (rid+1)", ImGuiTableColumnFlags_WidthFixed, 0.0f);
+                                ImGui::TableSetupColumn(I18n::TrId("common_value"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+                                ImGui::TableSetupColumn(I18n::TrId("skills_col_value_100"));
                                 ImGui::TableHeadersRow();
                                 setOpen = true;
                             } else {
@@ -523,12 +532,7 @@ inline void DrawSkillsPanel(const PluginSDK::Context* ctx,
                     }
                 }
                 if (setOpen) { ImGui::EndTable(); ImGui::TreePop(); }
-                ImGui::TextWrapped(
-                    "StatId is the Stats.dat row index + 1 (0 = the game's \"no "
-                    "stat\" sentinel). Resolve names by dumping Stats.dat: row "
-                    "690 = hundred_times_attacks_per_second -> runtime id 691, "
-                    "etc. Sets mirror the skill's GrantedEffectStatSets parts "
-                    "plus the merged character-context table (the big one).");
+                ImGui::TextWrapped("%s", I18n::Tr("skills_stat_id_note"));
             }
         }
     }

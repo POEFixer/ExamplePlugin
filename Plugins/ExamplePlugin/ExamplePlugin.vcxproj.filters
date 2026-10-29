@@ -52,6 +52,10 @@
     <ClInclude Include="examples\SdkStatus.h">
       <Filter>examples</Filter>
     </ClInclude>
+    <ClInclude Include="examples\Text.h">
+      <Filter>examples</Filter>
+    </ClInclude>
+    <ClInclude Include="lang_en.generated.h" />
     <ClInclude Include="..\..\POEFixer\plugin_sdk\PluginAbi.h">
       <Filter>api</Filter>
     </ClInclude>

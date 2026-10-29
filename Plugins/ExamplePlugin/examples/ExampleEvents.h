@@ -10,6 +10,7 @@
 #include "../../../POEFixer/plugin_sdk/PluginSDK.h"
 #include "../../../POEFixer/imgui/imgui.h"
 #include "SdkStatus.h"
+#include "Text.h"
 #include <atomic>
 
 namespace Examples {
@@ -53,25 +54,26 @@ inline void UnsubscribeAll(const PluginSDK::Context* ctx, EventsDemoState& s) {
 }
 
 inline void DrawEventsPanel(const PluginSDK::Context* ctx, EventsDemoState& s) {
-    if (!ctx) { StatusBadge(StatusLevel::Fail, "Context missing"); return; }
+    if (!ctx) { StatusBadge(StatusLevel::Fail, I18n::Tr("common_context_missing")); return; }
 
-    if (s.subscribed) StatusBadge(StatusLevel::Ok, "Subscribed to 4 events");
-    else              StatusBadge(StatusLevel::Warn, "Not subscribed (click Subscribe)");
+    if (s.subscribed) StatusBadge(StatusLevel::Ok, I18n::TrF("events_subscribed", { { "count", "4" } }).c_str());
+    else              StatusBadge(StatusLevel::Warn, I18n::Tr("events_not_subscribed"));
     ImGui::Separator();
 
     if (!s.subscribed) {
-        if (ImGui::Button("Subscribe to all events")) SubscribeAll(ctx, s);
+        if (ImGui::Button(I18n::TrId("events_subscribe"))) SubscribeAll(ctx, s);
     } else {
-        if (ImGui::Button("Unsubscribe all")) UnsubscribeAll(ctx, s);
+        if (ImGui::Button(I18n::TrId("events_unsubscribe"))) UnsubscribeAll(ctx, s);
     }
 
+    // The event names are the EventsService methods' (SDK names).
     ImGui::Separator();
-    ImGui::Text("OnFrame fired:         %d", s.frameCount.load());
-    ImGui::Text("OnAreaChange fired:    %d", s.areaChangeCount.load());
-    ImGui::Text("OnGameAttached fired:  %d", s.gameAttachedCount.load());
-    ImGui::Text("OnGameDetached fired:  %d", s.gameDetachedCount.load());
+    Show(I18n::TrF("events_fired", { { "event", "OnFrame" }, { "count", Num("%d", s.frameCount.load()) } }));
+    Show(I18n::TrF("events_fired", { { "event", "OnAreaChange" }, { "count", Num("%d", s.areaChangeCount.load()) } }));
+    Show(I18n::TrF("events_fired", { { "event", "OnGameAttached" }, { "count", Num("%d", s.gameAttachedCount.load()) } }));
+    Show(I18n::TrF("events_fired", { { "event", "OnGameDetached" }, { "count", Num("%d", s.gameDetachedCount.load()) } }));
 
-    if (ImGui::Button("Reset counters")) {
+    if (ImGui::Button(I18n::TrId("events_reset"))) {
         s.frameCount = 0;
         s.areaChangeCount = 0;
         s.gameAttachedCount = 0;

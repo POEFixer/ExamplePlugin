@@ -10,6 +10,7 @@
 
 #include "../../../POEFixer/plugin_sdk/PluginSDK.h"
 #include "../../../POEFixer/imgui/imgui.h"
+#include "Text.h"
 #include <deque>
 #include <sstream>
 #include <iomanip>
@@ -25,7 +26,7 @@ class PluginUiExplorer {
 public:
     void Draw(const PluginSDK::Context* ctx) {
         if (!ctx) {
-            ImGui::TextDisabled("Context unavailable");
+            ImGui::TextDisabled("%s", I18n::Tr("uiexp_no_context"));
             return;
         }
         m_Ctx = ctx;
@@ -41,8 +42,7 @@ public:
         }
 
         if (m_CurrentAddress == 0) {
-            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f),
-                "GameUI Address not found. Game may not be in InGameState.");
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "%s", I18n::Tr("uiexp_no_game_ui"));
             return;
         }
 
@@ -58,18 +58,17 @@ public:
         std::string currentSid = ctx->Ui.GetStringId(m_CurrentAddress);
 
         ImGui::BeginGroup();
-        if (!currentSid.empty()) {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
-                "Current: \"%s\"", currentSid.c_str());
-        } else {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
-                "Current: 0x%llX", static_cast<unsigned long long>(m_CurrentAddress));
-        }
+        // {element}: the element's StringId (game data) in quotes, else its address.
+        const std::string currentShown = !currentSid.empty()
+            ? "\"" + currentSid + "\""
+            : Num("0x%llX", static_cast<unsigned long long>(m_CurrentAddress));
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s",
+            I18n::TrF("uiexp_current", { { "element", currentShown } }).c_str());
         ImGui::EndGroup();
         if (ImGui::IsItemHovered()) {
             DrawHighlighter(m_CurrentAddress, IM_COL32(255, 255, 0, 255),
-                currentSid.empty() ? "Current" : currentSid);
-            ImGui::SetTooltip("Click to copy address");
+                currentSid.empty() ? std::string(I18n::Tr("uiexp_current_label")) : currentSid);
+            ImGui::SetTooltip("%s", I18n::Tr("uiexp_click_to_copy"));
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
                 char buf[20]; snprintf(buf, sizeof(buf), "0x%llX",
                                        static_cast<unsigned long long>(m_CurrentAddress));
@@ -85,17 +84,17 @@ public:
             m_CurrentChildIndex < static_cast<int>(m_ChildAddresses.size()));
 
         if (!hasParent) ImGui::BeginDisabled();
-        if (ImGui::Button("Parent")) NavigateTo(currentElem.ParentAddress);
+        if (ImGui::Button(I18n::TrId("uiexp_parent"))) NavigateTo(currentElem.ParentAddress);
         if (!hasParent) ImGui::EndDisabled();
 
         ImGui::SameLine();
         if (!hasSelectedChild) ImGui::BeginDisabled();
-        if (ImGui::Button("Child")) NavigateTo(m_ChildAddresses[m_CurrentChildIndex]);
+        if (ImGui::Button(I18n::TrId("uiexp_child"))) NavigateTo(m_ChildAddresses[m_CurrentChildIndex]);
         if (!hasSelectedChild) ImGui::EndDisabled();
 
         ImGui::SameLine();
         if (m_History.empty()) ImGui::BeginDisabled();
-        if (ImGui::Button("Back")) {
+        if (ImGui::Button(I18n::TrId("uiexp_back"))) {
             if (!m_History.empty()) {
                 uintptr_t prevAddr = m_History.back().Address;
                 m_History.pop_back();
@@ -107,7 +106,7 @@ public:
         if (m_History.empty()) ImGui::EndDisabled();
 
         ImGui::SameLine();
-        if (ImGui::Button("Root")) {
+        if (ImGui::Button(I18n::TrId("uiexp_root"))) {
             uintptr_t gameUi = ctx->Ui.GetGameUiRoot();
             if (gameUi != 0) {
                 m_History.clear();
@@ -117,7 +116,7 @@ public:
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("UiRoot")) {
+        if (ImGui::Button("UiRoot")) {   // the SDK's GetUiRoot (an SDK name)
             uintptr_t ui = ctx->Ui.GetUiRoot();
             if (ui != 0) {
                 m_History.clear();
@@ -127,25 +126,25 @@ public:
             }
         }
         ImGui::SameLine();
-        if (ImGui::Button("Copy Info"))
+        if (ImGui::Button(I18n::TrId("uiexp_copy_info")))
             CopyElementInfo(currentSid);
 
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (ImGui::CollapsingHeader("Children", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::CollapsingHeader(I18n::TrId("uiexp_children"), ImGuiTreeNodeFlags_DefaultOpen)) {
             DrawChildrenList();
         }
 
         ImGui::Spacing();
-        if (ImGui::CollapsingHeader("Element Properties", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::CollapsingHeader(I18n::TrId("uiexp_properties"), ImGuiTreeNodeFlags_DefaultOpen)) {
             DrawElementPropertiesFor(m_CurrentAddress);
         }
 
         if (hasSelectedChild) {
             ImGui::Spacing();
-            if (ImGui::CollapsingHeader("Selected Child Preview")) {
+            if (ImGui::CollapsingHeader(I18n::TrId("uiexp_selected_child"))) {
                 ImGui::Indent();
                 DrawElementPropertiesFor(m_ChildAddresses[m_CurrentChildIndex]);
                 ImGui::Unindent();
@@ -230,7 +229,7 @@ private:
     void DrawBreadcrumbs() {
         if (m_History.empty()) return;
 
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Path:");
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s", I18n::Tr("uiexp_path"));
         ImGui::SameLine();
 
         int startIdx = 0;
@@ -243,7 +242,7 @@ private:
         for (int i = startIdx; i < static_cast<int>(m_History.size()); i++) {
             auto& entry = m_History[i];
             std::string displayLabel = entry.Label;
-            if (displayLabel.length() > 20) displayLabel = displayLabel.substr(0, 17) + "...";
+            displayLabel = Shorten(displayLabel, 20);   // a localized game string: cut by characters
 
             ImGui::PushID(i);
             if (ImGui::SmallButton(displayLabel.c_str())) {
@@ -269,17 +268,17 @@ private:
                                    static_cast<unsigned long long>(m_CurrentAddress));
             currentLabel = buf;
         }
-        if (currentLabel.length() > 20) currentLabel = currentLabel.substr(0, 17) + "...";
+        currentLabel = Shorten(currentLabel, 20);
         ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", currentLabel.c_str());
     }
 
     void DrawSearchPanel() {
-        ImGui::SetNextItemWidth(200);
-        bool searchTriggered = ImGui::InputTextWithHint("##UiSearch", "Search StringId...",
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 15.0f);   // in em: follows the font, not pixels
+        bool searchTriggered = ImGui::InputTextWithHint("##UiSearch", I18n::Tr("uiexp_search_hint"),
             m_SearchBuffer, sizeof(m_SearchBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
 
         ImGui::SameLine();
-        if (ImGui::Button("Search") || searchTriggered) {
+        if (ImGui::Button(I18n::TrId("uiexp_search")) || searchTriggered) {
             if (std::strlen(m_SearchBuffer) > 0) {
                 m_SearchResults.clear();
                 std::string query(m_SearchBuffer);
@@ -294,14 +293,14 @@ private:
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Clear")) {
+        if (ImGui::Button(I18n::TrId("uiexp_clear"))) {
             m_SearchBuffer[0] = '\0';
             m_SearchResults.clear();
         }
 
         if (!m_SearchResults.empty()) {
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "Found %d result(s):",
-                static_cast<int>(m_SearchResults.size()));
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.2f, 1.0f), "%s",
+                I18n::TrF("uiexp_found", { { "count", Num("%d", static_cast<int>(m_SearchResults.size())) } }).c_str());
 
             float listHeight = (std::min)(120.0f,
                 static_cast<float>(m_SearchResults.size()) * 20.0f + 4.0f);
@@ -344,10 +343,10 @@ private:
 
     void DrawChildrenList() {
         int childCount = static_cast<int>(m_ChildAddresses.size());
-        ImGui::Text("Children: %d", childCount);
+        Show(I18n::TrF("uiexp_children_count", { { "count", Num("%d", childCount) } }));
         if (childCount == 0) return;
 
-        ImGui::SameLine(150);
+        ImGui::SameLine(0.0f, ImGui::GetFontSize());   // after the (translated) count, whatever its width
 
         if (ImGui::SmallButton("|<")) m_CurrentChildIndex = 0;
         ImGui::SameLine();
@@ -366,7 +365,7 @@ private:
         if (ImGui::SmallButton(">|")) m_CurrentChildIndex = childCount - 1;
 
         std::string preview = (m_CurrentChildIndex >= 0)
-            ? std::to_string(m_CurrentChildIndex) : "None";
+            ? std::to_string(m_CurrentChildIndex) : std::string(I18n::Tr("uiexp_no_child"));
 
         if (ImGui::BeginCombo("##Children", preview.c_str())) {
             for (int i = 0; i < childCount; ++i) {
@@ -379,7 +378,7 @@ private:
                 ss << i;
                 std::string childSid = m_Ctx->Ui.GetStringId(childAddr);
                 if (!childSid.empty()) {
-                    if (childSid.length() > 30) childSid = childSid.substr(0, 27) + "...";
+                    childSid = Shorten(childSid, 30);
                     ss << " \"" << childSid << "\"";
                 }
                 if (elem.ChildCount > 0) ss << " [" << elem.ChildCount << "]";
@@ -430,19 +429,31 @@ private:
             if (ImGui::IsItemHovered() && ImGui::IsItemClicked())
                 ImGui::SetClipboardText(stringId.c_str());
         } else {
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "StringId: (empty)");
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "StringId: %s", I18n::Tr("common_empty"));
         }
         ImGui::Spacing();
 
+        // One "label | value" row with a translated label.
+        auto labelCell = [](const char* label) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn(); ImGui::TextUnformatted(label);
+            ImGui::TableNextColumn();
+        };
+        // A section row: "--- <title> ---" in the accent colour.
+        auto sectionRow = [](const char* title) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "--- %s ---", title);
+            ImGui::TableNextColumn();
+        };
+
         if (ImGui::BeginTable("UiProps", 2,
             ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-            ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 180.0f);
-            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn(I18n::TrId("uiexp_property"), ImGuiTableColumnFlags_WidthFixed, 0.0f);
+            ImGui::TableSetupColumn(I18n::TrId("common_value"), ImGuiTableColumnFlags_WidthStretch);
 
             // Address
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn(); ImGui::Text("Address");
-            ImGui::TableNextColumn();
+            labelCell(I18n::Tr("common_address"));
             ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.6f, 1.0f), "0x%llX",
                                static_cast<unsigned long long>(addr));
             if (ImGui::IsItemHovered() && ImGui::IsItemClicked()) {
@@ -452,104 +463,66 @@ private:
             }
 
             // Parent
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn(); ImGui::Text("Parent");
-            ImGui::TableNextColumn();
+            labelCell(I18n::Tr("uiexp_parent"));
             if (elem.ParentAddress != 0)
                 ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "0x%llX",
                                    static_cast<unsigned long long>(elem.ParentAddress));
             else
-                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "(root)");
+                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s", I18n::Tr("uiexp_is_root"));
 
             // Visible
             bool vis = elem.IsVisible;
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn(); ImGui::Text("Visible (local)");
-            ImGui::TableNextColumn();
-            ImGui::TextColored(vis ? ImVec4(0.3f,1,0.3f,1) : ImVec4(1,0.3f,0.3f,1),
-                               vis ? "TRUE" : "FALSE");
+            labelCell(I18n::Tr("uiexp_visible_local"));
+            ImGui::TextColored(vis ? ImVec4(0.3f,1,0.3f,1) : ImVec4(1,0.3f,0.3f,1), "%s", TrueFalse(vis));
 
             // Children
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn(); ImGui::Text("Children");
-            ImGui::TableNextColumn();
+            labelCell(I18n::Tr("uiexp_children"));
             ImGui::Text("%d", elem.ChildCount);
 
-            // --- Position ---
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "--- Position ---");
-            ImGui::TableNextColumn();
+            sectionRow(I18n::Tr("uiexp_section_position"));
 
             float sx, sy, sw, sh;
             if (m_Ctx->Ui.ComputeScreenRect(addr, sx, sy, sw, sh)) {
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn(); ImGui::Text("Screen Pos");
-                ImGui::TableNextColumn(); ImGui::Text("%.1f, %.1f", sx, sy);
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn(); ImGui::Text("Screen Size");
-                ImGui::TableNextColumn(); ImGui::Text("%.1f x %.1f", sw, sh);
+                labelCell(I18n::Tr("uiexp_screen_pos"));  ImGui::Text("%.1f, %.1f", sx, sy);
+                labelCell(I18n::Tr("uiexp_screen_size")); ImGui::Text("%.1f x %.1f", sw, sh);
             }
 
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn(); ImGui::Text("Relative Pos");
-            ImGui::TableNextColumn();
+            labelCell(I18n::Tr("uiexp_relative_pos"));
             ImGui::Text("%.1f, %.1f", elem.RelativeX, elem.RelativeY);
 
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn(); ImGui::Text("Pos Modifier");
-            ImGui::TableNextColumn();
+            labelCell(I18n::Tr("uiexp_pos_modifier"));
             if (elem.HasPositionModifier)
                 ImGui::Text("%.1f, %.1f", elem.PositionModX, elem.PositionModY);
             else
-                ImGui::TextColored(ImVec4(0.5f,0.5f,0.5f,1), "disabled");
+                ImGui::TextColored(ImVec4(0.5f,0.5f,0.5f,1), "%s", I18n::Tr("uiexp_modifier_off"));
 
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn(); ImGui::Text("Unscaled Size");
-            ImGui::TableNextColumn();
+            labelCell(I18n::Tr("uiexp_unscaled_size"));
             ImGui::Text("%.1f x %.1f", elem.UnscaledWidth, elem.UnscaledHeight);
 
-            // --- Scale ---
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "--- Scale ---");
-            ImGui::TableNextColumn();
+            sectionRow(I18n::Tr("uiexp_section_scale"));
 
-            const char* scaleNames[] = { "None (Multiply)", "Width/Width", "Height/Height", "Width/Height" };
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn(); ImGui::Text("Scale Index");
-            ImGui::TableNextColumn();
+            // Built each frame (not static): the language can change between frames.
+            const char* scaleNames[] = { I18n::Tr("uiexp_scale_multiply"), I18n::Tr("uiexp_scale_width_width"),
+                                         I18n::Tr("uiexp_scale_height_height"), I18n::Tr("uiexp_scale_width_height") };
+            labelCell(I18n::Tr("uiexp_scale_index"));
             ImGui::Text("%u (%s)", elem.ScaleIndex,
-                        (elem.ScaleIndex <= 3) ? scaleNames[elem.ScaleIndex] : "Unknown");
+                        (elem.ScaleIndex <= 3) ? scaleNames[elem.ScaleIndex] : I18n::Tr("common_unknown"));
 
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn(); ImGui::Text("Local Scale Mult");
-            ImGui::TableNextColumn();
+            labelCell(I18n::Tr("uiexp_local_scale"));
             ImGui::Text("%.4f", elem.LocalScaleMultiplier);
 
-            // --- Flags ---
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "--- Flags ---");
-            ImGui::TableNextColumn();
+            sectionRow(I18n::Tr("uiexp_section_flags"));
 
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn(); ImGui::Text("Flags (raw)");
-            ImGui::TableNextColumn(); ImGui::Text("0x%08X", elem.Flags);
+            labelCell(I18n::Tr("uiexp_flags_raw")); ImGui::Text("0x%08X", elem.Flags);
 
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn(); ImGui::Text("Element Type");
-            ImGui::TableNextColumn();
+            labelCell(I18n::Tr("uiexp_element_type"));
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "0x%04X (%u)",
                                elem.ElementType, elem.ElementType);
 
-            // Text from UI element (if any)
+            // Text from UI element (if any): the game's own text.
             std::string text = m_Ctx->Ui.GetText(addr);
             if (!text.empty()) {
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn(); ImGui::Text("Text");
-                ImGui::TableNextColumn();
+                labelCell(I18n::Tr("uiexp_text"));
                 ImGui::TextColored(ImVec4(0.8f, 0.9f, 1, 1), "\"%s\"", text.c_str());
             }
 
@@ -557,6 +530,7 @@ private:
         }
     }
 
+    // A debug dump for pasting into a report: English on purpose, like a log.
     void CopyElementInfo(const std::string& currentSid) {
         PluginSDK::UiElement elem = m_Ctx->Ui.Read(m_CurrentAddress);
         float sx = 0, sy = 0, sw = 0, sh = 0;
